@@ -1,2 +1,2 @@
 # RideShareProject
-C++ Ride-Sharing Dispatch &amp; Trip Management System
+Python Ride-Sharing Dispatch &amp; Trip Management System
