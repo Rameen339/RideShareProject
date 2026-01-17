@@ -1,5 +1,6 @@
+# Rider.py
 class Rider:
-    def __init__(self, rider_id, pickup, drop):
+    def __init__(self, rider_id, pickup, dropoff):
         self.rider_id = rider_id
         self.pickup = pickup
-        self.drop = drop
+        self.dropoff = dropoff

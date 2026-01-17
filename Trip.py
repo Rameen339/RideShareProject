@@ -1,3 +1,4 @@
+# Trip.py
 class Trip:
     def __init__(self, trip_id, rider, driver):
         self.trip_id = trip_id
@@ -5,11 +6,16 @@ class Trip:
         self.driver = driver
         self.state = "REQUESTED"
 
-    def assign(self):
+    def assign_driver(self):
         self.state = "ASSIGNED"
 
-    def complete(self):
+    def start_trip(self):
+        self.state = "ONGOING"
+
+    def complete_trip(self):
         self.state = "COMPLETED"
 
-    def cancel(self):
+    def cancel_trip(self):
         self.state = "CANCELLED"
+        self.driver.release()
+
