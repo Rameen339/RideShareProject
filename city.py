@@ -1,4 +1,6 @@
 # City.py
+import heapq
+
 class Node:
     def __init__(self, name):
         self.name = name
@@ -6,11 +8,10 @@ class Node:
 
 class City:
     def __init__(self):
-        self.locations = []  # list of Node objects
+        self.locations = []
 
     def add_location(self, name):
-        node = Node(name)
-        self.locations.append(node)
+        self.locations.append(Node(name))
 
     def add_road(self, from_name, to_name, distance):
         from_node = self.get_node(from_name)
@@ -26,7 +27,6 @@ class City:
         return None
 
     def shortest_path(self, start_name, end_name):
-        import heapq
         start = self.get_node(start_name)
         end = self.get_node(end_name)
         if not start or not end:
@@ -44,5 +44,3 @@ class City:
                     distances[neighbor] = dist + d
                     heapq.heappush(heap, (distances[neighbor], neighbor))
         return distances[end]
-
-

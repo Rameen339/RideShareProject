@@ -1,21 +1,9 @@
 # Trip.py
 class Trip:
-    def __init__(self, trip_id, rider, driver):
+    def __init__(trip_counter, rider, driver, distance_km, fare):
         self.trip_id = trip_id
         self.rider = rider
         self.driver = driver
-        self.state = "REQUESTED"
-
-    def assign_driver(self):
-        self.state = "ASSIGNED"
-
-    def start_trip(self):
-        self.state = "ONGOING"
-
-    def complete_trip(self):
-        self.state = "COMPLETED"
-
-    def cancel_trip(self):
-        self.state = "CANCELLED"
-        self.driver.release()
-
+        self.distance = distance
+        self.fare = fare
+        self.state = "ASSIGNED"  # REQUESTED -> ASSIGNED -> ONGOING -> COMPLETED

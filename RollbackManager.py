@@ -1,23 +1,15 @@
 # RollbackManager.py
-class Node:
-    def __init__(self, trip):
-        self.trip = trip
-        self.next = None
-
 class RollbackManager:
     def __init__(self):
-        self.top = None
+        self.stack = []
 
     def save_state(self, trip):
-        node = Node(trip)
-        node.next = self.top
-        self.top = node
+        self.stack.append(trip)
 
-    def rollback_last(self):
-        if self.top is None:
-            print("Nothing to rollback")
-            return
-        trip = self.top.trip
-        self.top = self.top.next
-        trip.cancel_trip()
-        print(f"Rolled back trip {trip.trip_id}")
+    def rollback(self):
+        if self.stack:
+            trip = self.stack.pop()
+            trip.state = "CANCELLED"
+            trip.driver.available = True
+            return trip
+        return None
