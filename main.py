@@ -7,7 +7,7 @@ from RollbackManager import RollbackManager
 from RideShareSystem import RideShareSystem
 import time
 
-# Initialize city graph
+# ----- Initialize City -----
 city = City()
 city.add_location("A")
 city.add_location("B")
@@ -16,25 +16,39 @@ city.add_road("A", "B", 5)
 city.add_road("B", "C", 7)
 city.add_road("A", "C", 10)
 
-# Initialize drivers
+# ----- Initialize Drivers -----
 driver1 = Driver("A", "A", "Zone1")
 driver2 = Driver("B", "B", "Zone2")
 drivers = [driver1, driver2]
 
-# Initialize dispatcher and rollback manager
-dispatcher = DispatchEngine(drivers,city)
+# ----- Dispatcher and Rollback Manager -----
+dispatcher = DispatchEngine(drivers, city)
 rollback = RollbackManager()
 system = RideShareSystem(city, dispatcher, rollback)
 
-# Trip counter and history
 trip_counter = 1
 trip_history = []
 
+# ----- Helper: show city map with driver -----
+def display_city_map(driver_location, pickup=None, dropoff=None):
+    print("\nCity Map:")
+    for node in city.locations:
+        line = f"[{node.name}]"
+        if node.name == driver_location:
+            line += " <- Driver"
+        if pickup and node.name == pickup:
+            line += " <- Pickup"
+        if dropoff and node.name == dropoff:
+            line += " <- Dropoff"
+        print(line)
+    print("-" * 30)
+
+# ----- Menu Loop -----
 def print_options():
     print("\nOptions:")
     print("1. Cancel Trip")
     print("2. View History")
-    print("3. Request Another Ride")
+    print("3. Request Ride")
     print("4. Rollback Last Operation")
     print("5. Exit")
 
@@ -46,72 +60,62 @@ while True:
         pickup = input("Enter pickup location: ")
         dropoff = input("Enter dropoff location: ")
 
-        # Validate locations
         if city.get_node(pickup) is None or city.get_node(dropoff) is None:
             print("Invalid location! Choose from:", [node.name for node in city.locations])
             continue
 
         rider = Rider(trip_counter, pickup, dropoff)
+        trip = system.create_trip(trip_counter, rider)
 
-        # Assign nearest driver (returns driver object and extra fare)
-        try:
-            driver, extra_fare, nearest_name = dispatcher.assign_nearest_driver(city, pickup, dropoff)
-        except ValueError:
-            print("No drivers available at the moment!")
+        if trip is None or trip.state == "CANCELLED":
+            print("Trip could not be created.")
             continue
 
-        # Calculate shortest path distance and fare
-        distance_km = city.shortest_path(pickup, dropoff)
-        if distance_km == float('inf'):
-            print(f"No route exists from {pickup} to {dropoff}.")
-            continue
-
-        base_fare = distance_km * 10
-        total_fare = base_fare + extra_fare
-
-        # Show assignment info
-        print("\nRide Requested")
-        if nearest_name != driver.driver_id:
-            print(f"Nearest driver {nearest_name} is busy")
-            print(f"Driver {driver.driver_id} has been assigned")
-        else:
-            print(f"Driver {driver.driver_id} has been assigned")
-
-        print(f"Shortest path distance: {distance_km} km")
-        if extra_fare > 0:
-            print(f"Extra fare applied: {extra_fare} PKR")
-        print(f"Total 3fare: {total_fare} PKR")
-        print(f"Driver will reach in 5 minutes...")
-        time.sleep(2)  # simulate ETA
-
-        # Create Trip object
-        trip = Trip(trip_counter, rider, driver,distance_km,fare)
-        trip.state = "ASSIGNED"
-        system.trips.append(trip)
-
-        print("Trip is ASSIGNED. Driver is en route...")
-        time.sleep(2)
-
-        # Move trip to ONGOING
-        trip.state = "ONGOING"
-        print("Trip is ONGOING. You are en route...")
-        print(f"Estimated arrival in {distance_km} minutes...")
-        time.sleep(2)
-
-        # Complete the trip
-        trip.state = "COMPLETED"
-        print("You have reached your destination. Trip COMPLETED!")
-
-        # Save trip in history
+        # Add trip to history
         trip_history.append({
-            'trip_id': trip_counter,
+            'trip_id': trip.trip_id,
             'rider': rider.rider_id,
-            'driver': driver.driver_id,
+            'driver': trip.driver.driver_id,
             'pickup': pickup,
             'dropoff': dropoff,
-            'fare': total_fare,
+            'fare': trip.fare,
             'state': trip.state
         })
+
+        # --- Real-Time Simulation with Map ---
+        # 1️⃣ Driver approaching pickup
+        print(f"\nDriver {trip.driver.driver_id} is on the way to pickup location...")
+        driver_node = trip.driver.location
+        distance_to_pickup = city.shortest_path(driver_node, pickup)
+        for minute in range(distance_to_pickup, 0, -1):
+            display_city_map(driver_node, pickup, dropoff)
+            print(f"Driver arriving in {minute} minute(s)...")
+            time.sleep(1)  # 1 sec = 1 min for demo
+        trip.driver.location = pickup
+        display_city_map(trip.driver.location, pickup, dropoff)
+        print(f"Driver {trip.driver.driver_id} has arrived at pickup location!")
+
+        # 2️⃣ Trip starts (ONGOING)
+        trip.state = "ONGOING"
+        print(f"\nTrip {trip.trip_id} is now ONGOING. Traveling to {dropoff}...")
+
+        # 3️⃣ Simulate travel with driver moving
+        travel_distance = trip.distance
+        for minute in range(1, travel_distance + 1):
+            display_city_map(trip.driver.location, pickup, dropoff)
+            print(f"Minute {minute}/{travel_distance} en route...")
+            time.sleep(1)
+        trip.driver.location = dropoff
+
+        # 4️⃣ Trip completed
+        trip.state = "COMPLETED"
+        display_city_map(trip.driver.location, pickup, dropoff)
+        print(f"\nTrip {trip.trip_id} COMPLETED! You have reached {dropoff}.")
+
+        # Update trip history
+        for h in trip_history:
+            if h['trip_id'] == trip.trip_id:
+                h['state'] = "COMPLETED"
 
         trip_counter += 1
 
@@ -124,7 +128,12 @@ while True:
         if not trip:
             print("Trip not found.")
             continue
-        system.cancel_trip(trip)
+        if trip.state in ["COMPLETED", "CANCELLED"]:
+            print(f"Trip {t_id} cannot be cancelled (already {trip.state})")
+            continue
+        trip.state = "CANCELLED"
+        if trip.driver:
+            trip.driver.available = True
         for h in trip_history:
             if h['trip_id'] == t_id:
                 h['state'] = "CANCELLED"
@@ -150,5 +159,4 @@ while True:
 
     else:
         print("Invalid choice. Try again.")
-
 

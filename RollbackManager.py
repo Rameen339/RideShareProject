@@ -6,10 +6,12 @@ class RollbackManager:
     def save_state(self, trip):
         self.stack.append(trip)
 
-    def rollback(self):
-        if self.stack:
+    def rollback_last_k(self, system, k):
+        count = 0
+        while self.stack and count < k:
             trip = self.stack.pop()
-            trip.state = "CANCELLED"
-            trip.driver.available = True
-            return trip
-        return None
+            if trip.state not in ["COMPLETED", "CANCELLED"]:
+                trip.state = "CANCELLED"
+                if trip.driver:
+                    trip.driver.available = True
+                count += 1
