@@ -1,4 +1,5 @@
 # main.py
+
 from city import City
 from Driver import Driver
 from Rider import Rider
@@ -27,50 +28,6 @@ city.add_road("A", "H", 15)
 city.add_road("B", "F", 10)
 city.add_road("C", "G", 12)
 
-
-from location import City   # import your City class
-
-def main():
-    city = City()
-
-    # 1️⃣ Add locations (20+)
-    for i in range(1, 21):
-        city.add_location(f"L{i}")
-
-    # 2️⃣ Add roads (connections)
-    city.add_road("L1", "L2", 4)
-    city.add_road("L2", "L3", 3)
-    city.add_road("L3", "L4", 6)
-    city.add_road("L4", "L5", 5)
-    city.add_road("L5", "L6", 2)
-    city.add_road("L6", "L7", 4)
-    city.add_road("L7", "L8", 3)
-    city.add_road("L8", "L9", 6)
-    city.add_road("L9", "L10", 5)
-    city.add_road("L10", "L11", 2)
-
-    # some extra connections (realistic city)
-    city.add_road("L1", "L5", 10)
-    city.add_road("L3", "L7", 8)
-    city.add_road("L6", "L10", 7)
-
-    # 3️⃣ Find shortest path
-    start = "L1"
-    end = "L10"
-
-    distance, path = city.shortest_path_with_route(start, end)
-
-    # 4️⃣ Output
-    if distance == -1:
-        print("No path found")
-    else:
-        print("Shortest distance:", distance)
-        print("Shortest path:", " -> ".join(path))
-
-
-# REQUIRED to run main()
-if __name__ == "__main__":
-    main()
 # ------------------- Initialize Drivers -------------------
 drivers = [
     Driver("A", "A", "Zone1"),
@@ -313,4 +270,5 @@ while True:
 
     else:
         print("Invalid choice. Try again.")
+
 

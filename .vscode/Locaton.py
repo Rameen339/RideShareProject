@@ -1,46 +1,58 @@
-def shortest_path_with_route(self, start, end):
-    if start not in self.graph or end not in self.graph:
-        return -1, []
+# location.py
+from city import City
+class City:
+    def __init__(self):
+        self.graph = {}
 
-    visited = []
-    distance = {}
-    parent = {}
+    def add_road(self, u, v, w):
+        if u not in self.graph:
+            self.graph[u] = []
+        if v not in self.graph:
+            self.graph[v] = []
 
-    for node in self.graph:
-        distance[node] = 999999
-        parent[node] = None
+        self.graph[u].append((v, w))
+        self.graph[v].append((u, w))
 
-    distance[start] = 0
+    def shortest_path_with_route(self, start, end):
+        if start not in self.graph or end not in self.graph:
+            return -1, []
 
-    while True:
-        min_node = None
-        min_dist = 999999
+        visited = []
+        distance = {}
+        parent = {}
 
-        for node in distance:
-            if node not in visited and distance[node] < min_dist:
-                min_dist = distance[node]
-                min_node = node
+        for node in self.graph:
+            distance[node] = 999999
+            parent[node] = None
 
-        if min_node is None:
-            break
+        distance[start] = 0
 
-        if min_node == end:
-            break   # IMPORTANT FIX
+        while True:
+            min_node = None
+            min_dist = 999999
 
-        visited.append(min_node)
+            for node in distance:
+                if node not in visited and distance[node] < min_dist:
+                    min_dist = distance[node]
+                    min_node = node
 
-        for neigh, w in self.graph[min_node]:
-            if distance[min_node] + w < distance[neigh]:
-                distance[neigh] = distance[min_node] + w
-                parent[neigh] = min_node
+            if min_node is None or min_node == end:
+                break
 
-    if distance[end] == 999999:
-        return -1, []
+            visited.append(min_node)
 
-    path = []
-    curr = end
-    while curr is not None:
-        path.insert(0, curr)
-        curr = parent[curr]
+            for neigh, w in self.graph[min_node]:
+                if distance[min_node] + w < distance[neigh]:
+                    distance[neigh] = distance[min_node] + w
+                    parent[neigh] = min_node
 
-    return distance[end], path
+        if distance[end] == 999999:
+            return -1, []
+
+        path = []
+        curr = end
+        while curr is not None:
+            path.insert(0, curr)
+            curr = parent[curr]
+
+        return distance[end], path
