@@ -1,12 +1,10 @@
 # DispatchEngine.py
-from city import City
 class DispatchEngine:
     def __init__(self, drivers, city):
         self.drivers = drivers
         self.city = city
 
     def assign_nearest_driver(self, city, pickup, dropoff):
-        # Step 1: Find nearest driver
         nearest_driver = None
         nearest_distance = float('inf')
         nearest_name = None
@@ -18,21 +16,16 @@ class DispatchEngine:
                 nearest_driver = d
                 nearest_name = d.driver_id
 
-        if not nearest_driver:
-            raise ValueError("No drivers available!")
-
-        # Step 2: Check if nearest driver is available
-        if nearest_driver.available:
+        if nearest_driver and nearest_driver.available:
             nearest_driver.available = False
             extra_fare = 0
             return nearest_driver, extra_fare, nearest_name
         else:
-            # Find next available driver
+            # find next available driver
             available_drivers = [d for d in self.drivers if d.available]
             if not available_drivers:
                 raise ValueError("All drivers are busy!")
 
-            # Pick closest available driver
             assigned_driver = available_drivers[0]
             min_distance = city.shortest_path(assigned_driver.location, pickup)
             for d in available_drivers:

@@ -103,16 +103,23 @@ def show_statistics():
         avg_rating = round(sum(d.ratings)/len(d.ratings),1) if hasattr(d,"ratings") and d.ratings else "N/A"
         print(f"Driver {d.driver_id}: Avg Fare: {avg_fare:.1f} PKR | Avg Rating: {avg_rating}")
 
+# ------------------- Enhanced Trip Simulation -------------------
 def simulate_trip(trip, rider):
     global total_revenue, total_trips
     total_distance = simulate_traffic(trip.distance)
     for minute in range(1, total_distance+1):
-        time.sleep(0.5)  # faster simulation
+        time.sleep(0.5)
         print(f"\nMinute {minute}/{total_distance} en route for Trip {trip.trip_id}...")
         print_city_map(rider.pickup, rider.dropoff, trip.driver, drivers)
-        # Random notifications
-        if random.random() < 0.3:
-            print(f"Notification: Driver {trip.driver.driver_id} delayed due to traffic!")
+        
+        # Random events
+        event_chance = random.random()
+        if event_chance < 0.2:
+            print(f"Notification: Driver {trip.driver.driver_id} stuck in traffic! +1 min delay")
+            total_distance += 1
+        elif 0.2 <= event_chance < 0.3:
+            print(f"Notification: Heavy rain affecting trip speed! +2 min delay")
+            total_distance += 2
         elif minute == total_distance//2:
             print(f"Notification: Driver {trip.driver.driver_id} is halfway to destination.")
         elif minute == total_distance-1:
@@ -147,6 +154,7 @@ while True:
         pickup = input("Enter pickup location: ")
         dropoff = input("Enter dropoff location: ")
         promo_code = input("Enter promo code (or press Enter to skip): ")
+        vehicle_type = input("Select Vehicle Type (Car/Bike/Van): ").strip().lower()
 
         if city.get_node(pickup) is None or city.get_node(dropoff) is None:
             print("Invalid location! Choose from:", [node.name for node in city.locations])
@@ -157,11 +165,19 @@ while True:
         rider.wallet = rider_wallet
         riders.append(rider)
 
+        # Vehicle type affects fare
+        fare_multiplier = 1
+        if vehicle_type == "bike":
+            fare_multiplier = 0.8
+        elif vehicle_type == "van":
+            fare_multiplier = 1.5
+
+        # Create trip
         trip = system.create_trip(trip_counter, rider, promo_code)
         if trip is None or trip.state == "CANCELLED":
             continue
 
-        # Wallet check
+        trip.fare *= fare_multiplier
         if rider.wallet < trip.fare:
             print(f"Insufficient wallet balance! Wallet: {rider.wallet} PKR | Fare: {trip.fare} PKR")
             trip.state = "CANCELLED"
@@ -178,7 +194,8 @@ while True:
             'dropoff': dropoff,
             'fare': trip.fare,
             'state': trip.state,
-            'promo_code': promo_code
+            'promo_code': promo_code,
+            'vehicle': vehicle_type
         })
 
         # Add to monthly report
@@ -220,7 +237,7 @@ while True:
         print("\nTrip History:")
         for h in trip_history:
             print(f"Trip {h['trip_id']}: Rider {h['rider']} with Driver {h['driver']}, "
-                  f"{h['pickup']} -> {h['dropoff']}, Fare: {h['fare']} PKR, State: {h['state']}, Promo: {h.get('promo_code','None')}")
+                  f"{h['pickup']} -> {h['dropoff']}, Fare: {h['fare']} PKR, State: {h['state']}, Promo: {h.get('promo_code','None')}, Vehicle: {h.get('vehicle','Car')}")
 
     elif choice == "4":  # Rollback
         k = int(input("Enter number of last operations to rollback: "))
@@ -252,6 +269,4 @@ while True:
 
     else:
         print("Invalid choice. Try again.")
-
-
 
