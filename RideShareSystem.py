@@ -21,29 +21,31 @@ class RideShareSystem:
 
         print(f"\nTrip {trip.trip_id} REQUESTED. Searching for nearest driver...")
 
-        try:
-            driver, extra_fare, nearest_name = self.dispatcher.assign_nearest_driver(
-                self.city, rider.pickup, rider.dropoff
-            )
-        except ValueError:
+        # --- Use new dispatcher method with choice ---
+        driver, driver_distance, extra_fare, status = self.dispatcher.assign_driver_with_choice(rider.pickup)
+
+        if driver is None:
             print("No drivers available at the moment!")
             trip.state = "CANCELLED"
             return trip
 
-        # Simulate 1-minute delay for driver assignment
-        time.sleep(1)
-        trip.driver = driver
-        trip.state = "ASSIGNED"
-
-        # Show realistic driver assignment messages
-        if nearest_name == driver.driver_id:
-            print(f"Nearest driver {driver.driver_id} is available. Assigned to you!")
+        if status == "WAIT":
+            print(f"Waiting for nearest driver {driver.driver_id} to be free...")
+            # Simulate waiting time (1 minute real-time)
+            time.sleep(60)
+            print(f"Nearest driver {driver.driver_id} is now available!")
+            driver.available = False  # mark driver as busy
+            trip.driver = driver
+            trip.state = "ASSIGNED"
+            print(f"Driver {driver.driver_id} assigned after waiting.")
         else:
-            print(f"Nearest driver {nearest_name} was busy.")
-            print(f"Driver {driver.driver_id} has been assigned instead.")
+            trip.driver = driver
+            trip.state = "ASSIGNED"
             if extra_fare > 0:
                 trip.fare += extra_fare
-                print(f"Extra fare applied due to busy nearest driver: {extra_fare} PKR")
+                print(f"Nearest driver busy. Assigned driver {driver.driver_id} with extra fare {extra_fare} PKR.")
+            else:
+                print(f"Nearest driver {driver.driver_id} is available. Assigned to you!")
 
         print(f"Distance: {trip.distance} km | Total Fare: {trip.fare} PKR")
         print("Driver is on the way to pickup location...")

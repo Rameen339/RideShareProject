@@ -1,3 +1,4 @@
+# main.py
 from city import City
 from Driver import Driver
 from Rider import Rider
@@ -29,20 +30,6 @@ system = RideShareSystem(city, dispatcher, rollback)
 trip_counter = 1
 trip_history = []
 
-# ----- Helper: show city map with driver -----
-def display_city_map(driver_location, pickup=None, dropoff=None):
-    print("\nCity Map:")
-    for node in city.locations:
-        line = f"[{node.name}]"
-        if node.name == driver_location:
-            line += " <- Driver"
-        if pickup and node.name == pickup:
-            line += " <- Pickup"
-        if dropoff and node.name == dropoff:
-            line += " <- Dropoff"
-        print(line)
-    print("-" * 30)
-
 # ----- Menu Loop -----
 def print_options():
     print("\nOptions:")
@@ -60,18 +47,20 @@ while True:
         pickup = input("Enter pickup location: ")
         dropoff = input("Enter dropoff location: ")
 
+        # Validate locations
         if city.get_node(pickup) is None or city.get_node(dropoff) is None:
             print("Invalid location! Choose from:", [node.name for node in city.locations])
             continue
 
         rider = Rider(trip_counter, pickup, dropoff)
-        trip = system.create_trip(trip_counter, rider)
 
+        # Create trip (handles nearest driver waiting / extra fare)
+        trip = system.create_trip(trip_counter, rider)
         if trip is None or trip.state == "CANCELLED":
             print("Trip could not be created.")
             continue
 
-        # Add trip to history
+        # Save trip history
         trip_history.append({
             'trip_id': trip.trip_id,
             'rider': rider.rider_id,
@@ -82,37 +71,25 @@ while True:
             'state': trip.state
         })
 
-        # --- Real-Time Simulation with Map ---
-        # 1️⃣ Driver approaching pickup
-        print(f"\nDriver {trip.driver.driver_id} is on the way to pickup location...")
-        driver_node = trip.driver.location
-        distance_to_pickup = city.shortest_path(driver_node, pickup)
-        for minute in range(distance_to_pickup, 0, -1):
-            display_city_map(driver_node, pickup, dropoff)
-            print(f"Driver arriving in {minute} minute(s)...")
-            time.sleep(1)  # 1 sec = 1 min for demo
-        trip.driver.location = pickup
-        display_city_map(trip.driver.location, pickup, dropoff)
-        print(f"Driver {trip.driver.driver_id} has arrived at pickup location!")
+        time.sleep(1)  # small delay
 
-        # 2️⃣ Trip starts (ONGOING)
+        # Trip ONGOING
         trip.state = "ONGOING"
-        print(f"\nTrip {trip.trip_id} is now ONGOING. Traveling to {dropoff}...")
+        print(f"\nTrip {trip.trip_id} is ONGOING. You are en route to {dropoff}...")
+        print(f"Distance: {trip.distance} km | Current fare: {trip.fare} PKR")
+        print(f"Estimated arrival in {trip.distance} minutes...")
 
-        # 3️⃣ Simulate travel with driver moving
-        travel_distance = trip.distance
-        for minute in range(1, travel_distance + 1):
-            display_city_map(trip.driver.location, pickup, dropoff)
-            print(f"Minute {minute}/{travel_distance} en route...")
-            time.sleep(1)
-        trip.driver.location = dropoff
+        # Simulate travel time (realistic)
+        for minute in range(1, trip.distance + 1):
+            time.sleep(0.5)  # 0.5 sec per minute for demo speed
+            print(f"Minute {minute}/{trip.distance} en route...")
 
-        # 4️⃣ Trip completed
+        # Complete the trip
         trip.state = "COMPLETED"
-        display_city_map(trip.driver.location, pickup, dropoff)
         print(f"\nTrip {trip.trip_id} COMPLETED! You have reached {dropoff}.")
+        print(f"Total Fare: {trip.fare} PKR")
 
-        # Update trip history
+        # Update history
         for h in trip_history:
             if h['trip_id'] == trip.trip_id:
                 h['state'] = "COMPLETED"
