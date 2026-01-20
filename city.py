@@ -1,10 +1,14 @@
 # City.py
 import heapq
+from itertools import count
 
 class Node:
     def __init__(self, name):
         self.name = name
         self.neighbors = []  # list of tuples (neighbor_node, distance)
+
+    def __repr__(self):
+        return f"Node({self.name})"
 
 class City:
     def __init__(self):
@@ -34,13 +38,17 @@ class City:
 
         distances = {node: float('inf') for node in self.locations}
         distances[start] = 0
-        heap = [(0, start)]
+
+        counter = count()  # unique counter to prevent heap comparison of Node
+        heap = [(0, next(counter), start)]
+
         while heap:
-            dist, node = heapq.heappop(heap)
+            dist, _, node = heapq.heappop(heap)
             if node == end:
                 return dist
             for neighbor, d in node.neighbors:
                 if dist + d < distances[neighbor]:
                     distances[neighbor] = dist + d
-                    heapq.heappush(heap, (distances[neighbor], neighbor))
+                    heapq.heappush(heap, (distances[neighbor], next(counter), neighbor))
+
         return distances[end]

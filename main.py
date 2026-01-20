@@ -6,13 +6,14 @@ from Trip import Trip
 from DispatchEngine import DispatchEngine
 from RollbackManager import RollbackManager
 from RideShareSystem import RideShareSystem
-import time, random
+import time, random, threading
 
-# ----- Initialize City -----
+# ------------------- Initialize City -------------------
 city = City()
 for loc in ["A","B","C","D","E","F","G","H"]:
     city.add_location(loc)
 
+# Add roads
 city.add_road("A", "B", 5)
 city.add_road("B", "C", 7)
 city.add_road("A", "C", 10)
@@ -26,7 +27,7 @@ city.add_road("A", "H", 15)
 city.add_road("B", "F", 10)
 city.add_road("C", "G", 12)
 
-# ----- Initialize Drivers -----
+# ------------------- Initialize Drivers -------------------
 drivers = [
     Driver("A", "A", "Zone1"),
     Driver("B", "B", "Zone2"),
@@ -34,19 +35,19 @@ drivers = [
     Driver("D", "D", "Zone4")
 ]
 
-# ----- Dispatcher and Rollback Manager -----
+# ------------------- Dispatcher & Rollback Manager -------------------
 dispatcher = DispatchEngine(drivers, city)
 rollback = RollbackManager()
 system = RideShareSystem(city, dispatcher, rollback)
 
 trip_counter = 1
 trip_history = []
-
-# ----- Statistics -----
+riders = []
+monthly_report = []
 total_revenue = 0
 total_trips = 0
 
-# ----- Helper Functions -----
+# ------------------- Helper Functions -------------------
 def print_options():
     print("\nOptions:")
     print("1. Cancel Trip")
@@ -55,10 +56,10 @@ def print_options():
     print("4. Rollback Last Operation")
     print("5. Show Driver Status")
     print("6. Show Wallets")
-    print("7. Show Statistics")
+    print("7. Show Statistics & Monthly Report")
     print("8. Exit")
 
-def print_city_map(pickup, dropoff, driver):
+def print_city_map(pickup, dropoff, driver, other_drivers=None):
     print("\nCity Map:")
     for loc in city.locations:
         marker = ""
@@ -67,12 +68,16 @@ def print_city_map(pickup, dropoff, driver):
         if loc.name == dropoff:
             marker += "<- Dropoff"
         if driver and loc.name == driver.location:
-            marker += "<- Driver"
+            marker += "<- Assigned Driver"
+        if other_drivers:
+            for od in other_drivers:
+                if loc.name == od.location and od != driver:
+                    marker += f"<- Driver {od.driver_id}"
         print(f"[{loc.name}]{marker}")
     print("-" * 30)
 
-def simulate_traffic_delay(distance):
-    delay = random.randint(0, 2)  # Random 0-2 min delay
+def simulate_traffic(distance):
+    delay = random.randint(0,2)
     return distance + delay
 
 def show_driver_status():
@@ -82,7 +87,7 @@ def show_driver_status():
         avg_rating = round(sum(d.ratings)/len(d.ratings),1) if hasattr(d,"ratings") and d.ratings else "N/A"
         print(f"Driver {d.driver_id} | Location: {d.location} | Zone: {d.zone} | Status: {status} | Rating: {avg_rating}")
 
-def show_wallets(riders):
+def show_wallets():
     print("\nRider Wallets:")
     for r in riders:
         print(f"Rider {r.rider_id} | Wallet: {getattr(r,'wallet',0)} PKR")
@@ -98,8 +103,42 @@ def show_statistics():
         avg_rating = round(sum(d.ratings)/len(d.ratings),1) if hasattr(d,"ratings") and d.ratings else "N/A"
         print(f"Driver {d.driver_id}: Avg Fare: {avg_fare:.1f} PKR | Avg Rating: {avg_rating}")
 
-# ----- Main Loop -----
-riders = []
+def simulate_trip(trip, rider):
+    global total_revenue, total_trips
+    total_distance = simulate_traffic(trip.distance)
+    for minute in range(1, total_distance+1):
+        time.sleep(0.5)  # faster simulation
+        print(f"\nMinute {minute}/{total_distance} en route for Trip {trip.trip_id}...")
+        print_city_map(rider.pickup, rider.dropoff, trip.driver, drivers)
+        # Random notifications
+        if random.random() < 0.3:
+            print(f"Notification: Driver {trip.driver.driver_id} delayed due to traffic!")
+        elif minute == total_distance//2:
+            print(f"Notification: Driver {trip.driver.driver_id} is halfway to destination.")
+        elif minute == total_distance-1:
+            print(f"Notification: Driver {trip.driver.driver_id} is 1 minute away!")
+
+    trip.state = "COMPLETED"
+    print(f"\nTrip {trip.trip_id} COMPLETED! You have reached {rider.dropoff}.")
+    print(f"Total Fare Paid: {trip.fare} PKR")
+    total_revenue += trip.fare
+    total_trips += 1
+
+    # Ask for rating
+    try:
+        rating = int(input(f"Rate your driver {trip.driver.driver_id} (1-5 stars): "))
+        if not hasattr(trip.driver, "ratings"):
+            trip.driver.ratings = []
+        trip.driver.ratings.append(rating)
+    except:
+        print("Rating skipped.")
+
+    # Update history
+    for h in trip_history:
+        if h['trip_id'] == trip.trip_id:
+            h['state'] = "COMPLETED"
+
+# ------------------- Main Loop -------------------
 while True:
     print_options()
     choice = input("Enter your choice: ")
@@ -107,6 +146,7 @@ while True:
     if choice == "3":  # Request ride
         pickup = input("Enter pickup location: ")
         dropoff = input("Enter dropoff location: ")
+        promo_code = input("Enter promo code (or press Enter to skip): ")
 
         if city.get_node(pickup) is None or city.get_node(dropoff) is None:
             print("Invalid location! Choose from:", [node.name for node in city.locations])
@@ -117,7 +157,7 @@ while True:
         rider.wallet = rider_wallet
         riders.append(rider)
 
-        trip = system.create_trip(trip_counter, rider)
+        trip = system.create_trip(trip_counter, rider, promo_code)
         if trip is None or trip.state == "CANCELLED":
             continue
 
@@ -137,45 +177,20 @@ while True:
             'pickup': pickup,
             'dropoff': dropoff,
             'fare': trip.fare,
-            'state': trip.state
+            'state': trip.state,
+            'promo_code': promo_code
         })
 
-        # Trip ONGOING
-        trip.state = "ONGOING"
-        print(f"\nTrip {trip.trip_id} is ONGOING. Driver {trip.driver.driver_id} is en route to {pickup}...")
-        print_city_map(pickup, dropoff, trip.driver)
-        total_distance = simulate_traffic_delay(trip.distance)
-        for minute in range(1, total_distance + 1):
-            time.sleep(0.5)
-            print(f"Minute {minute}/{total_distance} en route...")
-            print_city_map(pickup, dropoff, trip.driver)
-            # Notification system
-            if random.random() < 0.3:
-                print(f"Notification: Driver {trip.driver.driver_id} delayed due to traffic!")
-            elif minute == total_distance // 2:
-                print(f"Notification: Driver {trip.driver.driver_id} is halfway to {dropoff}")
-            elif minute == total_distance - 1:
-                print(f"Notification: Driver {trip.driver.driver_id} is 1 minute away!")
+        # Add to monthly report
+        monthly_report.append({
+            'trip_id': trip.trip_id,
+            'fare': trip.fare,
+            'driver': trip.driver.driver_id,
+            'rider': rider.rider_id
+        })
 
-        trip.state = "COMPLETED"
-        print(f"\nTrip {trip.trip_id} COMPLETED! You have reached {dropoff}.")
-        print(f"Total Fare Paid: {trip.fare} PKR")
-        total_revenue += trip.fare
-        total_trips += 1
-
-        try:
-            rating = int(input(f"Rate your driver {trip.driver.driver_id} (1-5 stars): "))
-            if not hasattr(trip.driver, "ratings"):
-                trip.driver.ratings = []
-            trip.driver.ratings.append(rating)
-        except:
-            print("Rating skipped.")
-
-        # Update history
-        for h in trip_history:
-            if h['trip_id'] == trip.trip_id:
-                h['state'] = "COMPLETED"
-
+        # Start trip simulation in a thread
+        threading.Thread(target=simulate_trip, args=(trip, rider)).start()
         trip_counter += 1
 
     elif choice == "1":  # Cancel Trip
@@ -205,7 +220,7 @@ while True:
         print("\nTrip History:")
         for h in trip_history:
             print(f"Trip {h['trip_id']}: Rider {h['rider']} with Driver {h['driver']}, "
-                  f"{h['pickup']} -> {h['dropoff']}, Fare: {h['fare']} PKR, State: {h['state']}")
+                  f"{h['pickup']} -> {h['dropoff']}, Fare: {h['fare']} PKR, State: {h['state']}, Promo: {h.get('promo_code','None')}")
 
     elif choice == "4":  # Rollback
         k = int(input("Enter number of last operations to rollback: "))
@@ -216,10 +231,20 @@ while True:
         show_driver_status()
 
     elif choice == "6":  # Show Wallets
-        show_wallets(riders)
+        show_wallets()
 
-    elif choice == "7":  # Show Statistics
+    elif choice == "7":  # Show Statistics & Monthly Report
         show_statistics()
+        print("\nMonthly Report Summary:")
+        total_revenue_report = sum(t['fare'] for t in monthly_report)
+        total_trips_report = len(monthly_report)
+        print(f"Total trips this month: {total_trips_report}")
+        print(f"Total revenue this month: {total_revenue_report} PKR")
+        driver_count = {}
+        for t in monthly_report:
+            driver_count[t['driver']] = driver_count.get(t['driver'], 0) + 1
+        busiest_driver = max(driver_count, key=driver_count.get) if driver_count else "N/A"
+        print(f"Busiest driver this month: {busiest_driver} with {driver_count.get(busiest_driver,0)} trips")
 
     elif choice == "8":  # Exit
         print("Exiting RideShare System.")
@@ -227,7 +252,6 @@ while True:
 
     else:
         print("Invalid choice. Try again.")
-
 
 
 
