@@ -1,4 +1,4 @@
-# City.py
+# Location.py
 import heapq
 from itertools import count
 
@@ -30,6 +30,7 @@ class City:
                 return node
         return None
 
+    # Distance only
     def shortest_path(self, start_name, end_name):
         start = self.get_node(start_name)
         end = self.get_node(end_name)
@@ -38,8 +39,7 @@ class City:
 
         distances = {node: float('inf') for node in self.locations}
         distances[start] = 0
-
-        counter = count()  # unique counter to prevent heap comparison of Node
+        counter = count()
         heap = [(0, next(counter), start)]
 
         while heap:
@@ -50,5 +50,39 @@ class City:
                 if dist + d < distances[neighbor]:
                     distances[neighbor] = dist + d
                     heapq.heappush(heap, (distances[neighbor], next(counter), neighbor))
-
         return distances[end]
+
+    # Distance + Path
+    def shortest_path_with_route(self, start_name, end_name):
+        start = self.get_node(start_name)
+        end = self.get_node(end_name)
+        if not start or not end:
+            return -1, []
+
+        distances = {node: float('inf') for node in self.locations}
+        parent = {node: None for node in self.locations}
+        distances[start] = 0
+        counter = count()
+        heap = [(0, next(counter), start)]
+
+        while heap:
+            dist, _, node = heapq.heappop(heap)
+            if node == end:
+                break
+            for neighbor, d in node.neighbors:
+                if dist + d < distances[neighbor]:
+                    distances[neighbor] = dist + d
+                    parent[neighbor] = node
+                    heapq.heappush(heap, (distances[neighbor], next(counter), neighbor))
+
+        if distances[end] == float('inf'):
+            return -1, []
+
+        path = []
+        curr = end
+        while curr:
+            path.insert(0, curr.name)
+            curr = parent[curr]
+
+        return distances[end], path
+

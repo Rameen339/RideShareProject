@@ -1,39 +1,63 @@
 # main.py
 
-from city import City
 from Driver import Driver
 from Rider import Rider
 from Trip import Trip
 from DispatchEngine import DispatchEngine
 from RollbackManager import RollbackManager
 from RideShareSystem import RideShareSystem
+from city import City  # using your updated Location.py
 import time, random, threading
 
-# ------------------- Initialize City -------------------
+# ------------------- Initialize City with 27 locations -------------------
 city = City()
-for loc in ["A","B","C","D","E","F","G","H"]:
-    city.add_location(loc)
+for i in range(1, 28):
+    city.add_location(f"L{i}")
 
-# Add roads
-city.add_road("A", "B", 5)
-city.add_road("B", "C", 7)
-city.add_road("A", "C", 10)
-city.add_road("C", "D", 4)
-city.add_road("B", "D", 6)
-city.add_road("D", "E", 8)
-city.add_road("E", "F", 3)
-city.add_road("F", "G", 5)
-city.add_road("G", "H", 4)
-city.add_road("A", "H", 15)
-city.add_road("B", "F", 10)
-city.add_road("C", "G", 12)
+# Add roads (sample realistic connections)
+roads = [
+    ("L1","L2",4), ("L2","L3",6), ("L3","L4",5), ("L4","L5",7),
+    ("L5","L6",3), ("L6","L7",4), ("L7","L8",5), ("L8","L9",6),
+    ("L9","L10",4), ("L10","L11",3), ("L11","L12",6), ("L12","L13",5),
+    ("L13","L14",4), ("L14","L15",7), ("L15","L16",6), ("L16","L17",5),
+    ("L17","L18",4), ("L18","L19",3), ("L19","L20",6), ("L20","L21",5),
+    ("L21","L22",4), ("L22","L23",6), ("L23","L24",3), ("L24","L25",5),
+    ("L25","L26",4), ("L26","L27",6),  # main connections
+    ("L1","L5",10), ("L3","L10",9), ("L6","L15",12),
+    ("L8","L18",11), ("L12","L20",8), ("L14","L25",10)  # extra cross connections
+]
+
+for u,v,d in roads:
+    city.add_road(u,v,d)
+
+# ------------------- Pre-calculate Shortest Paths -------------------
+shortest_paths_table = {}
+
+def calculate_all_shortest_paths():
+    for start_node in city.locations:
+        for end_node in city.locations:
+            distance, path = city.shortest_path_with_route(start_node.name, end_node.name)
+            shortest_paths_table[(start_node.name, end_node.name)] = (distance, path)
+
+calculate_all_shortest_paths()
+
+def show_distance_between_locations(start, end):
+    if (start, end) in shortest_paths_table:
+        distance, path = shortest_paths_table[(start, end)]
+        if distance == -1:
+            print(f"No path found from {start} to {end}")
+        else:
+            print(f"Shortest distance from {start} to {end}: {distance}")
+            print("Path:", " -> ".join(path))
+    else:
+        print("Invalid locations.")
 
 # ------------------- Initialize Drivers -------------------
 drivers = [
-    Driver("A", "A", "Zone1"),
-    Driver("B", "B", "Zone2"),
-    Driver("C", "C", "Zone3"),
-    Driver("D", "D", "Zone4")
+    Driver("A", "L1", "Zone1"),
+    Driver("B", "L5", "Zone2"),
+    Driver("C", "L10", "Zone3"),
+    Driver("D", "L15", "Zone4")
 ]
 
 # ------------------- Dispatcher & Rollback Manager -------------------
@@ -58,7 +82,9 @@ def print_options():
     print("5. Show Driver Status")
     print("6. Show Wallets")
     print("7. Show Statistics & Monthly Report")
-    print("8. Exit")
+    print("8. Rate a Driver")
+    print("9. Rate a Rider")
+    print("10. Exit")
 
 def print_city_map(pickup, dropoff, driver, other_drivers=None):
     print("\nCity Map:")
@@ -104,35 +130,40 @@ def show_statistics():
         avg_rating = round(sum(d.ratings)/len(d.ratings),1) if hasattr(d,"ratings") and d.ratings else "N/A"
         print(f"Driver {d.driver_id}: Avg Fare: {avg_fare:.1f} PKR | Avg Rating: {avg_rating}")
 
-# ------------------- Enhanced Trip Simulation -------------------
+# ------------------- Trip Simulation -------------------
+# ------------------- Trip Simulation -------------------
 def simulate_trip(trip, rider):
     global total_revenue, total_trips
     total_distance = simulate_traffic(trip.distance)
-    for minute in range(1, total_distance+1):
-        time.sleep(0.5)
-        print(f"\nMinute {minute}/{total_distance} en route for Trip {trip.trip_id}...")
+    
+    print(f"\nTrip {trip.trip_id} started: {rider.pickup} -> {rider.dropoff} | Distance: {total_distance} mins")
+    
+    for minute in range(1, total_distance + 1):
+        time.sleep(1)  # slower: 1 second per simulated minute
+        print(f"\n[Trip {trip.trip_id}] Minute {minute}/{total_distance} en route...")
         print_city_map(rider.pickup, rider.dropoff, trip.driver, drivers)
         
         # Random events
         event_chance = random.random()
         if event_chance < 0.2:
-            print(f"Notification: Driver {trip.driver.driver_id} stuck in traffic! +1 min delay")
+            print(f"[Notification] Driver {trip.driver.driver_id} stuck in traffic! +1 min delay")
             total_distance += 1
         elif 0.2 <= event_chance < 0.3:
-            print(f"Notification: Heavy rain affecting trip speed! +2 min delay")
+            print(f"[Notification] Heavy rain affecting trip speed! +2 min delay")
             total_distance += 2
-        elif minute == total_distance//2:
-            print(f"Notification: Driver {trip.driver.driver_id} is halfway to destination.")
-        elif minute == total_distance-1:
-            print(f"Notification: Driver {trip.driver.driver_id} is 1 minute away!")
+        elif minute == total_distance // 2:
+            print(f"[Notification] Driver {trip.driver.driver_id} is halfway to destination.")
+        elif minute == total_distance - 1:
+            print(f"[Notification] Driver {trip.driver.driver_id} is 1 minute away!")
 
+    # Trip complete
     trip.state = "COMPLETED"
     print(f"\nTrip {trip.trip_id} COMPLETED! You have reached {rider.dropoff}.")
     print(f"Total Fare Paid: {trip.fare} PKR")
     total_revenue += trip.fare
     total_trips += 1
 
-    # Ask for rating
+    # Ask rider to rate driver
     try:
         rating = int(input(f"Rate your driver {trip.driver.driver_id} (1-5 stars): "))
         if not hasattr(trip.driver, "ratings"):
@@ -145,6 +176,49 @@ def simulate_trip(trip, rider):
     for h in trip_history:
         if h['trip_id'] == trip.trip_id:
             h['state'] = "COMPLETED"
+
+
+
+# ------------------- Rating Functions -------------------
+def rate_driver():
+    print("\nAvailable Drivers to Rate:")
+    for d in drivers:
+        print(f"{d.driver_id} | Location: {d.location}")
+    driver_id = input("Enter Driver ID to rate: ").strip()
+    driver = next((d for d in drivers if d.driver_id == driver_id), None)
+    if not driver:
+        print("Invalid driver ID.")
+        return
+    try:
+        rating = int(input(f"Rate driver {driver.driver_id} (1-5 stars): "))
+        if rating < 1 or rating > 5:
+            print("Rating must be between 1 and 5.")
+            return
+        if not hasattr(driver, "ratings"):
+            driver.ratings = []
+        driver.ratings.append(rating)
+        print(f"Thank you! You rated driver {driver.driver_id} {rating} stars.")
+    except:
+        print("Invalid input. Rating skipped.")
+
+def rate_rider():
+    print("\nAvailable Riders to Rate:")
+    for r in riders:
+        print(f"Rider {r.rider_id} | Pickup: {r.pickup} | Dropoff: {r.dropoff}")
+    rider_id = input("Enter Rider ID to rate: ").strip()
+    rider = next((r for r in riders if str(r.rider_id) == rider_id), None)
+    if not rider:
+        print("Invalid rider ID.")
+        return
+    try:
+        rating = int(input(f"Rate rider {rider.rider_id} (1-5 stars): "))
+        if rating < 1 or rating > 5:
+            print("Rating must be between 1 and 5.")
+            return
+        rider.ratings.append(rating)
+        print(f"Thank you! You rated rider {rider.rider_id} {rating} stars.")
+    except:
+        print("Invalid input. Rating skipped.")
 
 # ------------------- Main Loop -------------------
 while True:
@@ -199,7 +273,6 @@ while True:
             'vehicle': vehicle_type
         })
 
-        # Add to monthly report
         monthly_report.append({
             'trip_id': trip.trip_id,
             'fare': trip.fare,
@@ -264,11 +337,15 @@ while True:
         busiest_driver = max(driver_count, key=driver_count.get) if driver_count else "N/A"
         print(f"Busiest driver this month: {busiest_driver} with {driver_count.get(busiest_driver,0)} trips")
 
-    elif choice == "8":  # Exit
+    elif choice == "8":  # Rate a driver
+        rate_driver()
+
+    elif choice == "9":  # Rate a rider
+        rate_rider()
+
+    elif choice == "10":  # Exit
         print("Exiting RideShare System.")
         break
 
     else:
         print("Invalid choice. Try again.")
-
-
