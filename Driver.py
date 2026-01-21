@@ -1,24 +1,25 @@
-# Driver.py
+# driver.py
+
 class Driver:
-    def __init__(self, driver_id, location, zone):
-        self.driver_id = driver_id        # Unique ID or name of driver
-        self.location = location          # Current location (Node name)
-        self.zone = zone                  # Zone the driver primarily serves
-        self.available = True             # True if driver can take a trip
-        self.current_trip = None          # Track assigned trip
+    def __init__(self, driver_id, location):
+        self.driver_id = driver_id
+        self.location = location
+        self.available = True
 
-    def assign_trip(self, trip):
-        if self.available:
-            self.current_trip = trip
-            self.available = False
-            return True
-        return False
+        # Driver statistics
+        self.total_rides = 0
+        self.rating = 5.0
+        self.total_ratings = 0
 
-    def complete_trip(self):
-        if self.current_trip:
-            self.current_trip = None
-            self.available = True
+    def assign_driver(self):
+        self.available = False
 
-    def __str__(self):
-        status = "Available" if self.available else "Busy"
-        return f"Driver {self.driver_id} | Location: {self.location} | Zone: {self.zone} | Status: {status}"
+    def complete_ride(self, new_rating):
+        self.available = True
+        self.total_rides += 1
+
+        # update rating safely
+        self.total_ratings += 1
+        self.rating = (
+            (self.rating * (self.total_ratings - 1)) + new_rating
+        ) / self.total_ratings

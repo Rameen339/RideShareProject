@@ -63,12 +63,43 @@ def show_distance_between_locations(start, end):
         print("Invalid locations.")
 
 # ------------------- Initialize Drivers -------------------
+# ---------- DRIVER SETUP ----------
 drivers = [
-    Driver("A", "L1", "Zone1"),
-    Driver("B", "L5", "Zone2"),
-    Driver("C", "L10", "Zone3"),
-    Driver("D", "L15", "Zone4")
+    Driver("D1", "L4"),
+    Driver("D2", "L9"),
+    Driver("D3", "L15")
 ]
+
+rider_location = "L1"
+
+nearest_driver = None
+min_distance = 999999
+best_route = []
+
+for d in drivers:
+    if d.available:
+        dist, route = city.shortest_path_with_route(d.location, rider_location)
+        if dist != -1 and dist < min_distance:
+            min_distance = dist
+            nearest_driver = d
+            best_route = route
+
+if nearest_driver:
+    print("\nDriver Assigned")
+    print("Driver ID:", nearest_driver.driver_id)
+    print("Distance:", min_distance)
+    print("Route:", " -> ".join(best_route))
+
+    nearest_driver.assign_driver()
+
+    # simulate ride completion + rating
+    nearest_driver.complete_ride(4.5)
+
+    print("\nDriver Stats")
+    print("Total Rides:", nearest_driver.total_rides)
+    print("Rating:", round(nearest_driver.rating, 2))
+else:
+    print("No available driver found")
 
 # ------------------- Dispatcher & Rollback Manager -------------------
 dispatcher = DispatchEngine(drivers, city)
@@ -388,12 +419,43 @@ def show_distance_between_locations(start, end):
         print("Invalid locations.")
 
 # ------------------- Initialize Drivers -------------------
+# ---------- DRIVER SETUP ----------
 drivers = [
-    Driver("A", "L1", "Zone1"),
-    Driver("B", "L5", "Zone2"),
-    Driver("C", "L10", "Zone3"),
-    Driver("D", "L15", "Zone4")
+    Driver("D1", "L4"),
+    Driver("D2", "L9"),
+    Driver("D3", "L15")
 ]
+
+rider_location = "L1"
+
+nearest_driver = None
+min_distance = 999999
+best_route = []
+
+for d in drivers:
+    if d.available:
+        dist, route = city.shortest_path_with_route(d.location, rider_location)
+        if dist != -1 and dist < min_distance:
+            min_distance = dist
+            nearest_driver = d
+            best_route = route
+
+if nearest_driver:
+    print("\nDriver Assigned")
+    print("Driver ID:", nearest_driver.driver_id)
+    print("Distance:", min_distance)
+    print("Route:", " -> ".join(best_route))
+
+    nearest_driver.assign_driver()
+
+    # simulate ride completion + rating
+    nearest_driver.complete_ride(4.5)
+
+    print("\nDriver Stats")
+    print("Total Rides:", nearest_driver.total_rides)
+    print("Rating:", round(nearest_driver.rating, 2))
+else:
+    print("No available driver found")
 
 # ------------------- Dispatcher & Rollback Manager -------------------
 dispatcher = DispatchEngine(drivers, city)
