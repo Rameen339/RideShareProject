@@ -7,6 +7,30 @@ from RollbackManager import RollbackManager
 from RideShareSystem import RideShareSystem
 from city import City  # using your updated Location.py
 import time, random, threading
+from demand_forecast import DemandForecast
+from feedback_manager import WalletManager, FeedbackManager, RiderAnalytics, RiderPromotions, simulate_rider_activity, print_rider_summary
+
+from enhancements import (
+    TrafficAwareCity, RidePoolManager, SurgePricing, ETACalculator,
+    select_best_driver, TripAnalytics, simulate_random_events,
+    display_possible_routes, suggest_drivers, RevenueAnalyzer,
+    eta_progress_bar, analyze_rider_history, before_trip_start, after_trip_end
+)
+# ----- Initialize managers here -----
+wallet_manager = WalletManager()
+feedback_manager = FeedbackManager()
+rider_analytics = RiderAnalytics(feedback_manager, wallet_manager)
+promotions = RiderPromotions()
+trip_analytics = TripAnalytics() 
+
+# Your existing lists and counters
+riders = []
+drivers = []
+trip_counter = 1
+dispatcher = DispatchEngine(drivers,City)  # pass your drivers list
+rollback_manager = RollbackManager()
+system = RideShareSystem(City, dispatcher, rollback_manager)  # or whatever your class is
+trip_analytics = TripAnalytics()  # if you have analytics
 
 
 
@@ -39,6 +63,25 @@ roads = [
 
 for u,v,d in roads:
     city.add_road(u,v,d)
+
+drivers = [
+    Driver("A", "L1", "Zone1"),
+    Driver("B", "L5", "Zone2"),
+    Driver("C", "L10", "Zone3"),
+    Driver("D", "L15", "Zone4")
+]
+
+dispatcher = DispatchEngine(drivers, city)
+
+# 4️⃣ Initialize Rollback Manager
+rollback_manager = RollbackManager()
+
+# 5️⃣ Initialize RideShareSystem (needs city, dispatcher, rollback)
+system = RideShareSystem(city, dispatcher, rollback_manager)
+
+# 6️⃣ Initialize Trip Analytics / Demand Forecast
+trip_analytics = TripAnalytics()
+demand_forecast = DemandForecast()
 
 # ------------------- Pre-calculate Shortest Paths -------------------
 shortest_paths_table = {}
@@ -106,6 +149,8 @@ dispatcher = DispatchEngine(drivers, city)
 rollback = RollbackManager()
 system = RideShareSystem(city, dispatcher, rollback)
 
+demand_forecast = DemandForecast()
+
 trip_counter = 1
 trip_history = []
 riders = []
@@ -156,7 +201,7 @@ def print_options():
     print("16. Show Most Frequent Routes")
     print("17. Show Busiest Hours")
     print("18. Some Other Option")  # replace with actual description
-
+    print("19. Show Rider Summary")
 
 
 def print_city_map(pickup, dropoff, driver, other_drivers=None):
@@ -763,32 +808,73 @@ while True:
         rider.wallet = 500
         riders.append(rider)
 
-        trip = system.create_trip(trip_counter, rider, promo_code)
+
+
+        vehicle_types = ["Car", "Bike"]  # you can add more
+        vehicle_fares = {}
+        distance = city.shortest_path_with_route(pickup, dropoff)[0]
+        base_fare_per_km = {"Car": 20, "Bike": 10}  # example rates
+
+        for v in vehicle_types:
+            fare = distance * base_fare_per_km[v]
+            fare = apply_promo_code(fare, promo_code)
+            vehicle_fares[v] = fare
+
+    # Display fares to user
+        print("\nEstimated fares for available vehicles:")
+        for v, f in vehicle_fares.items():
+            print(f"{v}: {f} PKR")
+
+    # Ask user to select vehicle
+        while True:
+            selected_vehicle = input("Select vehicle type (Car/Bike): ").strip().capitalize()
+            if selected_vehicle in vehicle_fares:
+               break
+            print("Invalid choice. Please select a valid vehicle.")
+
+        trip_fare = vehicle_fares[selected_vehicle]
+        trip = system.create_trip(trip_counter, rider, promo_code, vehicle_type=selected_vehicle, fare=trip_fare)
+
         if trip is None or trip.state == "CANCELLED":
            continue
 
-        if rider.wallet < trip.fare:
-           print("Insufficient wallet balance!")
-           trip.state = "CANCELLED"
-           trip.driver.available = True
-           continue
+        
 
+        # Check if rider has enough wallet balance
+        while rider.wallet < trip.fare:
+           print(f"Insufficient wallet balance! Trip fare is {trip.fare}, but your wallet has {rider.wallet} PKR.")
+        try:
+           topup_amount = float(input("Enter additional amount to top up your wallet: "))
+           rider.wallet += topup_amount
+           print(f"Wallet updated. New balance: {rider.wallet} PKR")
+        except:
+           print("Invalid amount. Please enter a number.")
+
+# Deduct fare after sufficient funds
         rider.wallet -= trip.fare
+        print(f"Payment successful! {trip.fare} PKR deducted from wallet. Remaining balance: {rider.wallet} PKR")
 
-    # ✅ ADD ONLY THESE 3 LINES
+# Start trip
         from datetime import datetime
         trip.start_time = datetime.now()
+        demand_forecast.record_trip(trip)
         trip_analytics.record_trip(trip)
-
         threading.Thread(target=simulate_trip, args=(trip, rider)).start()
         trip_counter += 1
 
 
 
     elif choice == "4":  # Rollback
-        k = int(input("Enter number of last operations to rollback: "))
+        while True:
+            k_input = input("Enter number of last operations to rollback: ").strip()
+            if not k_input.isdigit() or int(k_input) <= 0:
+               print("Please enter a valid positive number.")
+               continue
+            k = int(k_input)
+            break
         rollback.rollback_last_k(system, k)
         print(f"Rolled back last {k} operation(s).")
+
 
     elif choice == "5":  # Show Driver Status
         show_driver_status()
@@ -816,7 +902,7 @@ while True:
         rate_rider()
 
     elif choice == "10":  # Top Up Wallet
-        rider_id = int(input("Enter Rider ID to top-up: "))
+        rider_id = int(input("Enter Rider ID to top-up: ")).stripe()
         rider = next((r for r in riders if r.rider_id == rider_id), None)
         if rider:
             top_up_wallet(rider)
@@ -824,7 +910,7 @@ while True:
             print("Invalid Rider ID.")
 
     elif choice == "11":  # Show Wallet History
-        rider_id = int(input("Enter Rider ID to view wallet history: "))
+        rider_id = int(input("Enter Rider ID to view wallet history: ")).stripe()
         rider = next((r for r in riders if r.rider_id == rider_id), None)
         if rider:
             show_wallet_history(rider)
@@ -850,15 +936,23 @@ while True:
         for (pickup, dropoff), count in top_routes:
             print(f"{pickup} -> {dropoff}: {count} trips")
 
-    elif choice == "17":  # Show Busiest Hours
-        busy_hours = trip_analytics.busiest_hours()
-        print("\nTop 5 Busiest Hours:")
-        for hour, count in busy_hours:
+    elif choice == "17":
+        busy = demand_forecast.busiest_hours()
+        if not busy:
+           print("No trip data available yet.")
+        else:
+           print("\nBusiest Hours:")
+           for hour, count in busy:
             print(f"{hour}:00 - {count} trips")
+
 
     elif choice == "18":  # Placeholder / Future Option
         print("Option 18 selected. Feature not implemented yet.")
 
-    else:
-        print("Invalid choice. Please enter a number between 1 and 18.")
+    
+    
+    elif choice == "19":
+       print_rider_summary(rider_analytics, feedback_manager, wallet_manager)
 
+    else:
+        print("Invalid choice. Please enter a number between 1 and 19.")
