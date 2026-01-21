@@ -9,17 +9,33 @@ class RideShareSystem:
         self.dispatcher = dispatcher
         self.rollback = rollback
         self.trips = []
-        self.wallets = {}  # rider_id -> balance
-        self.driver_ratings = {}  # driver_id -> [ratings]
+        self.wallets = {}          # rider_id -> balance
+        self.driver_ratings = {}   # driver_id -> list of ratings
 
-    def create_trip(self, trip_id, rider, promo_code=""):
+    def create_trip(self, trip_id, rider, promo_code="", vehicle_type="Car", fare=None):
+        """
+        Create a trip with a given vehicle type and fare.
+        """
         distance_km = self.city.shortest_path(rider.pickup, rider.dropoff)
         if distance_km == float('inf'):
             print(f"No route exists from {rider.pickup} to {rider.dropoff}.")
             return None
 
-        base_fare = distance_km * 10
-        trip = Trip(trip_id, rider, None, distance_km, base_fare)
+        # If fare is not passed, calculate default fare
+        if fare is None:
+            base_rate = 20 if vehicle_type == "Car" else 10
+            fare = distance_km * base_rate
+
+        # Apply promo code
+        if promo_code in ["DISCOUNT10", "DISCOUNT50", "FLAT50"]:
+            if promo_code == "DISCOUNT10":
+                fare *= 0.9
+            elif promo_code == "DISCOUNT50":
+                fare = max(0, fare - 50)
+            elif promo_code == "FLAT50":
+                fare = max(0, fare - 50)
+
+        trip = Trip(trip_id, rider, vehicle_type, distance_km, fare)
         self.trips.append(trip)
         trip.state = "REQUESTED"
         print(f"\nTrip {trip.trip_id} REQUESTED. Searching for nearest driver...")
@@ -33,7 +49,7 @@ class RideShareSystem:
             trip.state = "CANCELLED"
             return trip
 
-        # 1-minute simulated wait
+        # Simulate 1-minute wait
         time.sleep(1)
         trip.driver = driver
         trip.state = "ASSIGNED"
@@ -41,19 +57,12 @@ class RideShareSystem:
         if nearest_name == driver.driver_id:
             print(f"Nearest driver {driver.driver_id} is available. Assigned to you!")
         else:
-            print(f"Nearest driver {nearest_name} was busy.")
-            print(f"Driver {driver.driver_id} has been assigned instead.")
+            print(f"Nearest driver {nearest_name} was busy. Driver {driver.driver_id} assigned instead.")
             if extra_fare > 0:
                 trip.fare += extra_fare
                 print(f"Extra fare applied due to busy nearest driver: {extra_fare} PKR")
 
-        # Apply promo code discount
-        if promo_code == "DISCOUNT50":
-            discount = 50
-            trip.fare = max(0, trip.fare - discount)
-            print(f"Promo code applied! Discount: {discount} PKR")
-
-        print(f"Distance: {trip.distance} km | Total Fare: {trip.fare} PKR")
+        print(f"Vehicle Type: {vehicle_type} | Distance: {trip.distance} km | Total Fare: {trip.fare} PKR")
         print("Driver is on the way to pickup location...")
 
         self.rollback.save_state(trip)
@@ -61,7 +70,7 @@ class RideShareSystem:
 
     def simulate_trip(self, trip):
         """Simulate minute-by-minute trip with random traffic events."""
-        print(f"\nTrip {trip.trip_id} is ONGOING from {trip.rider.pickup} to {trip.rider.dropoff}")
+        print(f"\nTrip {trip.trip_id} ONGOING from {trip.rider.pickup} to {trip.rider.dropoff}")
         minutes = trip.distance
         for m in range(1, minutes + 1):
             traffic_delay = random.choice([0, 1, 2])  # random delay
@@ -72,7 +81,8 @@ class RideShareSystem:
                 print("")
             time.sleep(1)
         trip.state = "COMPLETED"
-        trip.driver.available = True
+        if trip.driver:
+            trip.driver.available = True
         print(f"Trip {trip.trip_id} COMPLETED! You have reached {trip.rider.dropoff}.")
 
     def rate_driver(self, driver_id, rating):
