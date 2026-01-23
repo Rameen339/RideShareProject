@@ -104,14 +104,23 @@ def simulate_trip(trip, rider):
     total_revenue += trip.fare
     total_trips += 1
 
-    # Ask rider to rate driver at the end
-    try:
-        rating = int(input(f"Rate your driver {trip.driver.driver_id} (1-5 stars): "))
-        if not hasattr(trip.driver, "ratings"):
-            trip.driver.ratings = []
-        trip.driver.ratings.append(rating)
-    except:
-        print("Rating skipped.")
+    # Ask rider to rate driver at the end of every trip
+    while True:
+        try:
+            print("\nPlease rate your driver experience:")
+            rating_input = input(f"Rate your driver {trip.driver.driver_id} (e.g., 1, 3, 4, 4.5, 4.9): ")
+            rating = float(rating_input)
+            
+            if 0 <= rating <= 5:
+                if not hasattr(trip.driver, "ratings"):
+                    trip.driver.ratings = []
+                trip.driver.ratings.append(rating)
+                print(f"Thank you! You rated the driver {rating} stars.")
+                break
+            else:
+                print("Invalid rating. Please provide a value between 0 and 5.")
+        except ValueError:
+            print("Invalid input. Please enter a numerical rating.")
 
 def apply_promo_code(fare, code):
     if code in promo_codes:
@@ -181,7 +190,9 @@ while True:
             nearest_driver.available = False
             rider.wallet -= final_fare
             
-            threading.Thread(target=simulate_trip, args=(trip, rider)).start()
+            # Note: Using .join() here to prevent main loop blocking, rating prompt inside function
+            simulate_trip_thread = threading.Thread(target=simulate_trip, args=(trip, rider))
+            simulate_trip_thread.start()
             trip_counter += 1
         else:
             print("No available driver found.")
