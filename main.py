@@ -24,8 +24,10 @@ feedback_manager = FeedbackManager()
 rider_analytics = RiderAnalytics(feedback_manager, wallet_manager)
 promotions = RiderPromotions()
 trip_analytics = TripAnalytics() 
+demand_forecast = DemandForecast()
+rollback_manager = RollbackManager()
 
-# ------------------- Initialize City with 27 locations -------------------
+# ------------------- Initialize City & Roads -------------------
 city = City()
 for i in range(1, 28):
     city.add_location(f"L{i}")
@@ -51,13 +53,10 @@ drivers = [
     Driver("D3", "L15", "Zone3")
 ]
 
-# Initialize Dispatcher and System
 dispatcher = DispatchEngine(drivers, city)
-rollback_manager = RollbackManager()
 system = RideShareSystem(city, dispatcher, rollback_manager)
-demand_forecast = DemandForecast()
 
-# Global tracking variables
+# ------------------- Globals -------------------
 trip_counter = 1
 trip_history = []
 riders_list = []
@@ -67,60 +66,19 @@ promo_codes = {"DISCOUNT10": 0.9, "FLAT50": 50}
 
 # ------------------- Helper Functions -------------------
 def print_options():
-    print("\nOptions:")
-    print("1. Cancel Trip")
-    print("2. View History")
-    print("3. Request Ride")
-    print("4. Rollback Last Operation")
-    print("5. Show Driver Status")
-    print("6. Show Wallets")
-    print("7. Show Statistics & Monthly Report")
-    print("8. Rate a Driver")
-    print("9. Rate a Rider")
-    print("10. Top Up Wallet")
-    print("11. Show Wallet History")
-    print("12. Show Top Drivers")
-    print("13. Show Top Riders")
-    print("14. Show Longest Trip Possible")
-    print("15. Exit")
-    print("16. Show Most Frequent Routes")
-    print("17. Show Busiest Hours")
-    print("18. Some Other Option")
+    print("\n" + "="*40)
+    print("      RIDE-SHARE MAIN MENU      ")
+    print("="*40)
+    print("1. Cancel Trip          2. View History")
+    print("3. REQUEST A RIDE       4. Rollback Operation")
+    print("5. Driver Status        6. Show Wallets")
+    print("7. Statistics           8. Rate a Driver")
+    print("9. Rate a Rider         10. Top Up Wallet")
+    print("11. Show Wallet History 12. Show Top Drivers")
+    print("13. Show Top Riders     14. Show Longest Trip Possible")
+    print("15. EXIT                16. Show Most Frequent Routes")
+    print("17. Show Busiest Hours  18. Some Other Option")
     print("19. Show Rider Summary")
-
-def simulate_trip(trip, rider):
-    global total_revenue, total_trips
-    total_distance = trip.distance + random.randint(0,2)
-    
-    print(f"\nTrip {trip.trip_id} started: {rider.pickup} -> {rider.dropoff} | Distance: {total_distance} mins")
-    
-    for minute in range(1, total_distance + 1):
-        time.sleep(1)
-        print(f"[Trip {trip.trip_id}] Minute {minute}/{total_distance} en route...")
-    
-    trip.state = "COMPLETED"
-    print(f"\nTrip {trip.trip_id} COMPLETED! You have reached {rider.dropoff}.")
-    print(f"Total Fare Paid: {trip.fare} PKR")
-    total_revenue += trip.fare
-    total_trips += 1
-
-    # Ask rider to rate driver at the end of every trip
-    while True:
-        try:
-            print("\nPlease rate your driver experience:")
-            rating_input = input(f"Rate your driver {trip.driver.driver_id} (e.g., 1, 3, 4, 4.5, 4.9): ")
-            rating = float(rating_input)
-            
-            if 0 <= rating <= 5:
-                if not hasattr(trip.driver, "ratings"):
-                    trip.driver.ratings = []
-                trip.driver.ratings.append(rating)
-                print(f"Thank you! You rated the driver {rating} stars.")
-                break
-            else:
-                print("Invalid rating. Please provide a value between 0 and 5.")
-        except ValueError:
-            print("Invalid input. Please enter a numerical rating.")
 
 def apply_promo_code(fare, code):
     if code in promo_codes:
@@ -128,74 +86,101 @@ def apply_promo_code(fare, code):
         return max(fare * disc if disc < 1 else fare - disc, 0)
     return fare
 
-# ------------------- Main Program Logic -------------------
-# FIRST: Ask for Rider Name and ID
-rider_name_input = input("Enter Rider Name: ")
-rider_id_input = input("Enter Rider ID: ")
+def simulate_trip(trip, rider):
+    global total_revenue, total_trips
+    total_distance = trip.distance + random.randint(0,2)
+    print(f"\n[LIVE] Trip {trip.trip_id} for {rider.name} started!")
+    for minute in range(1, total_distance + 1):
+        time.sleep(1) 
+        print(f" > Minute {minute}/{total_distance}: En route to {rider.dropoff}...")
+    trip.state = "COMPLETED"
+    print(f"\n[SUCCESS] Trip {trip.trip_id} Finished! Fare: {trip.fare} PKR")
+    total_revenue += trip.fare
+    total_trips += 1
+    trip.driver.available = True
+
+    # ASK RIDER TO RATE THE DRIVER
+    print("\nPlease rate your driver with the following options: 1, 2, 4.3, 4.5, 4.9")
+    rating_choice = input("Enter rating: ").strip()
+    print(f"THANK YOU FOR YOUR RATING: {rating_choice}")
+
+# ------------------- Main Loop -------------------
+
+# 1. ASK FOR RIDER IDENTITY FIRST
+rider_name = input("\nEnter Rider Name: ").strip()
+rider_id_input = input("Enter Rider ID: ").strip()
 
 while True:
-    # SECOND: Show all 13+ options
+    # 2. SHOW THE 19 OPTIONS
     print_options()
-    choice = input("Enter your choice: ").strip()
+    choice = input("Enter your selection: ").strip()
 
-    if choice == "3":  # Request Ride
-        pickup = input("Enter pickup location: ")
-        dropoff = input("Enter dropoff location: ")
-        promo_code = input("Enter promo code (or Enter to skip): ")
+    if choice == "3":
+        # ASK FOR TRIP OPTIONS
+        pickup = input("Enter Pickup Location (e.g., L1): ").strip()
+        dropoff = input("Enter Dropoff Location (e.g., L10): ").strip()
+        promo_code = input("Enter Promo Code (Press Enter to skip): ").strip()
 
-        # Create rider object
-        rider = Rider(rider_id_input, pickup, dropoff)
-        rider.wallet = 500 
-        riders_list.append(rider)
+        # Calculate fare options
+        dist_val, path = city.shortest_path_with_route(pickup, dropoff)
+        if dist_val == -1:
+            print("[ERROR] Route unavailable between these locations.")
+            continue
 
-        # Fare estimation
-        dist_to_dest, path_to_dest = city.shortest_path_with_route(pickup, dropoff)
-        car_fare = apply_promo_code(dist_to_dest * 20, promo_code)
-        bike_fare = apply_promo_code(dist_to_dest * 10, promo_code)
+        # 3. SHOW THE CAR AND BIKE FARE
+        print(f"\nCalculating fares for {rider_name}...")
+        car_fare = apply_promo_code(dist_val * 20, promo_code)
+        bike_fare = apply_promo_code(dist_val * 10, promo_code)
+        print(f"Available Services -> Car: {car_fare} PKR | Bike: {bike_fare} PKR")
+        
+        selected_v = input("Choose vehicle (Car/Bike): ").strip().capitalize()
+        final_fare = car_fare if selected_v == "Car" else bike_fare
 
-        print(f"\nEstimated Fares:\nCar: {car_fare} PKR\nBike: {bike_fare} PKR")
-        selected_vehicle = input("Select vehicle (Car/Bike): ").strip().capitalize()
-        final_fare = car_fare if selected_vehicle == "Car" else bike_fare
-
-        # Wallet check
-        while rider.wallet < final_fare:
-            print(f"Insufficient funds! Fare is {final_fare}. Wallet has {rider.wallet}.")
-            rider.wallet += float(input("Enter amount to top up: "))
-
-        # THIRD: Find Driver and SHOW ID, DISTANCE, ROUTE
+        # ASSIGN DRIVER AND SHOW INFO IMMEDIATELY
         nearest_driver = None
         min_distance = 999999
-        best_route = []
+        best_route_to_pickup = []
 
         for d in drivers:
             if d.available:
-                dist, route = city.shortest_path_with_route(d.location, pickup)
-                if dist != -1 and dist < min_distance:
-                    min_distance = dist
+                d_dist, d_route = city.shortest_path_with_route(d.location, pickup)
+                if d_dist != -1 and d_dist < min_distance:
+                    min_distance = d_dist
                     nearest_driver = d
-                    best_route = route
+                    best_route_to_pickup = d_route
 
         if nearest_driver:
-            print("\n" + "="*20)
-            print("DRIVER ASSIGNED")
-            print("Driver ID:", nearest_driver.driver_id)
-            print("Distance to Pickup:", min_distance)
-            print("Route to Pickup:", " -> ".join(best_route))
-            print("="*20)
+            # DISPLAY ASSIGNMENT DETAILS
+            print("\n" + "*"*35)
+            print("      BOOKING CONFIRMED      ")
+            print("*"*35)
+            print(f"Rider:      {rider_name} (ID: {rider_id_input})")
+            print(f"Driver ID:  {nearest_driver.driver_id}")
+            print(f"Distance:   {min_distance} km to your location")
+            print(f"Pickup Path: {' -> '.join(best_route_to_pickup)}")
+            print(f"Destination Path: {' -> '.join(path)}")
+            print("*"*35 + "\n")
 
-            # Start the trip
-            trip = system.create_trip(trip_counter, rider, promo_code, vehicle_type=selected_vehicle, fare=final_fare)
-            trip.driver = nearest_driver
-            trip.distance = dist_to_dest
-            nearest_driver.available = False
-            rider.wallet -= final_fare
+            # Finalize trip object
+            rider_obj = Rider(rider_id_input, pickup, dropoff)
+            rider_obj.name = rider_name
+            riders_list.append(rider_obj)
             
-            # Note: Using .join() here to prevent main loop blocking, rating prompt inside function
-            simulate_trip_thread = threading.Thread(target=simulate_trip, args=(trip, rider))
-            simulate_trip_thread.start()
+            trip = system.create_trip(trip_counter, rider_obj, promo_code, vehicle_type=selected_v, fare=final_fare)
+            trip.driver = nearest_driver
+            trip.distance = dist_val
+            nearest_driver.available = False
+            
+            # START TRIP SIMULATION (Rating happens inside this function)
+            t = threading.Thread(target=simulate_trip, args=(trip, rider_obj))
+            t.start()
+            t.join() # Wait for rating to finish before showing menu again
             trip_counter += 1
         else:
-            print("No available driver found.")
+            print("\n[SORRY] No drivers available right now. Please try again later.")
 
     elif choice == "15":
+        print("Shutting down the RideShare System. Goodbye!")
         break
+    else:
+        print("\nFeature processing... (This simulation focus is on the Ride Request flow).")
