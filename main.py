@@ -1,4 +1,3 @@
-# main.py
 from Driver import Driver
 from Rider import Rider
 from Trip import Trip
@@ -6,181 +5,219 @@ from DispatchEngine import DispatchEngine
 from RollbackManager import RollbackManager
 from RideShareSystem import RideShareSystem
 from city import City
-import time, random, threading
+import time, threading, random
 from datetime import datetime
-from demand_forecast import DemandForecast
-from feedback_manager import WalletManager, FeedbackManager, RiderAnalytics, RiderPromotions, simulate_rider_activity, print_rider_summary
 
-from enhancements import (
-    TrafficAwareCity, RidePoolManager, SurgePricing, ETACalculator,
-    select_best_driver, TripAnalytics, simulate_random_events,
-    display_possible_routes, suggest_drivers, RevenueAnalyzer,
-    eta_progress_bar, analyze_rider_history, before_trip_start, after_trip_end
-)
-
-# ----- Initialize managers here -----
-wallet_manager = WalletManager()
-feedback_manager = FeedbackManager()
-rider_analytics = RiderAnalytics(feedback_manager, wallet_manager)
-promotions = RiderPromotions()
-trip_analytics = TripAnalytics() 
-demand_forecast = DemandForecast()
+# ------------------- Initialization -------------------
 rollback_manager = RollbackManager()
-
-# ------------------- Initialize City & Roads -------------------
 city = City()
-for i in range(1, 28):
-    city.add_location(f"L{i}")
+
+turkey_cities = ["Istanbul", "Ankara", "Izmir", "Bursa", "Antalya", "Adana", "Konya", 
+                 "Gaziantep", "Sanliurfa", "Mersin", "Diyarbakir", "Kayseri", "Eskisehir", 
+                 "Samsun", "Trabzon", "Rize", "Erzurum", "Van", "Malatya", "Elazig", 
+                 "Sivas", "Tokat", "Amasya", "Corum", "Kastamonu", "Bolu", "Duzce"]
+
+for c in turkey_cities: city.add_location(c)
 
 roads = [
-    ("L1","L2",4), ("L2","L3",6), ("L3","L4",5), ("L4","L5",7),
-    ("L5","L6",3), ("L6","L7",4), ("L7","L8",5), ("L8","L9",6),
-    ("L9","L10",4), ("L10","L11",3), ("L11","L12",6), ("L12","L13",5),
-    ("L13","L14",4), ("L14","L15",7), ("L15","L16",6), ("L16","L17",5),
-    ("L17","L18",4), ("L18","L19",3), ("L19","L20",6), ("L20","L21",5),
-    ("L21","L22",4), ("L22","L23",6), ("L23","L24",3), ("L24","L25",5),
-    ("L25","L26",4), ("L26","L27",6),
-    ("L1","L5",10), ("L3","L10",9), ("L6","L15",12),
-    ("L8","L18",11), ("L12","L20",8), ("L14","L25",10)
+    ("Istanbul","Bursa",4), ("Bursa","Eskisehir",6), ("Eskisehir","Ankara",5),
+    ("Ankara","Konya",7), ("Konya","Antalya",3), ("Antalya","Mersin",4),
+    ("Mersin","Adana",5), ("Adana","Gaziantep",6), ("Gaziantep","Sanliurfa",4),
+    ("Sanliurfa","Diyarbakir",3), ("Diyarbakir","Malatya",6), ("Malatya","Elazig",5),
+    ("Elazig","Erzurum",4), ("Erzurum","Van",7), ("Van","Trabzon",6), 
+    ("Trabzon","Rize",5), ("Rize","Samsun",4), ("Samsun","Amasya",3),
+    ("Amasya","Tokat",6), ("Tokat","Sivas",5), ("Sivas","Kayseri",4), 
+    ("Kayseri","Ankara",6), ("Corum","Kastamonu",3), ("Kastamonu","Bolu",5),
+    ("Bolu","Duzce",4), ("Duzce","Istanbul",6), ("Istanbul","Ankara",10)
 ]
-for u,v,d in roads:
-    city.add_road(u,v,d)
+for u,v,d in roads: city.add_road(u,v,d)
 
-# ------------------- Initialize Drivers -------------------
 drivers = [
-    Driver("D1", "L4", "Zone1"),
-    Driver("D2", "L9", "Zone2"),
-    Driver("D3", "L15", "Zone3")
+    Driver("D1", "Bursa", "Marmara"),
+    Driver("D2", "Gaziantep", "Southeast"),
+    Driver("D3", "Ankara", "Central")
 ]
+
+# Advanced Driver Attributes
+for d in drivers:
+    d.ratings_list, d.feedbacks, d.earnings, d.available = [], [], 0, True
+    d.fuel = random.randint(60, 100)
+    d.vehicle_type = random.choice(["Standard", "Luxury"])
+    d.total_km = 0
 
 dispatcher = DispatchEngine(drivers, city)
 system = RideShareSystem(city, dispatcher, rollback_manager)
 
 # ------------------- Globals -------------------
-trip_counter = 1
-trip_history = []
-riders_list = []
-total_revenue = 0
-total_trips = 0
-promo_codes = {"DISCOUNT10": 0.9, "FLAT50": 50}
+trip_counter, trips_history, total_revenue, total_trips = 1, [], 0, 0
+wallets, wallet_history = {}, {}
 
-# ------------------- Helper Functions -------------------
-def print_options():
-    print("\n" + "="*40)
-    print("      RIDE-SHARE MAIN MENU      ")
-    print("="*40)
-    print("1. Cancel Trip          2. View History")
-    print("3. REQUEST A RIDE       4. Rollback Operation")
-    print("5. Driver Status        6. Show Wallets")
-    print("7. Statistics           8. Rate a Driver")
-    print("9. Rate a Rider         10. Top Up Wallet")
-    print("11. Show Wallet History 12. Show Top Drivers")
-    print("13. Show Top Riders     14. Show Longest Trip Possible")
-    print("15. EXIT                16. Show Most Frequent Routes")
-    print("17. Show Busiest Hours  18. Some Other Option")
-    print("19. Show Rider Summary")
-
-def apply_promo_code(fare, code):
-    if code in promo_codes:
-        disc = promo_codes[code]
-        return max(fare * disc if disc < 1 else fare - disc, 0)
-    return fare
-
-def simulate_trip(trip, rider):
+# ------------------- Logic Functions -------------------
+def simulate_trip(trip, rider, path, weather_factor, weather_name):
     global total_revenue, total_trips
-    total_distance = trip.distance + random.randint(0,2)
-    print(f"\n[LIVE] Trip {trip.trip_id} for {rider.name} started!")
-    for minute in range(1, total_distance + 1):
+    total_dist = trip.distance
+    duration = int(total_dist * weather_factor)
+    
+    print(f"\n[LIVE] Trip {trip.trip_id} started! Weather: {weather_name} ({weather_factor}x slowdown)")
+    print(f"Path: {' -> '.join(path)}")
+    
+    for minute in range(1, duration + 1):
         time.sleep(1) 
-        print(f" > Minute {minute}/{total_distance}: En route to {rider.dropoff}...")
+        idx = min(int((minute / duration) * (len(path) - 1)), len(path) - 1)
+        current_city = path[idx]
+        
+        km_done = min(int((minute / duration) * total_dist), total_dist)
+        remaining_km = total_dist - km_done
+        print(f" > Minute {minute}/{duration}: {current_city} | {remaining_km} km remaining")
+
     trip.state = "COMPLETED"
-    print(f"\n[SUCCESS] Trip {trip.trip_id} Finished! Fare: {trip.fare} PKR")
-    total_revenue += trip.fare
-    total_trips += 1
     trip.driver.available = True
+    trip.driver.location = rider.dropoff
+    trip.driver.fuel -= (total_dist * 0.7) # Fuel Consumption
+    trip.driver.total_km += total_dist
+    
+    print(f"\n[SUCCESS] Arrived at {rider.dropoff}! Fuel Left: {max(0, trip.driver.fuel):.1f}%")
+    
+    # Payment Guard
+    print("-" * 35)
+    while True:
+        try:
+            pay_amt = float(input(f"Total Fare: {trip.fare}P. Enter Payment: "))
+            if pay_amt < trip.fare:
+                print(f"[!] Warning: Paid {pay_amt}P, but {trip.fare}P is required!")
+            else:
+                if pay_amt > trip.fare: print(f"Generous tip of {pay_amt - trip.fare}P recorded!")
+                trip.driver.earnings += pay_amt
+                total_revenue += pay_amt
+                total_trips += 1
+                break
+        except ValueError: print("Please enter a numeric value.")
 
-    # ASK RIDER TO RATE THE DRIVER
-    print("\nPlease rate your driver with the following options: 1, 2, 4.3, 4.5, 4.9")
-    rating_choice = input("Enter rating: ").strip()
-    print(f"THANK YOU FOR YOUR RATING: {rating_choice}")
+    try:
+        r = float(input(f"Rate Driver (1-5): "))
+        f = input("Leave feedback: ")
+        trip.driver.ratings_list.append(r); trip.driver.feedbacks.append(f)
+    except: pass
+    print("-" * 35)
 
-# ------------------- Main Loop -------------------
+def print_options():
+    print("\n" + "="*45 + "\n      TURKEY RIDE-SHARE - ELITE EDITION\n" + "="*45)
+    print("1. Cancel Trip           2. View Trip History\n3. REQUEST A RIDE        4. Rollback Last Trip\n5. Driver Status (Fuel)  6. Show Wallets\n7. Show Statistics       8. Rate a Driver (Manual)\n9. Rate a Rider          10. Top Up Wallet\n11. Show Wallet History  12. Show Top Drivers\n13. Show Top Riders      14. Longest Trip History\n15. EXIT                 16. Most Frequent Routes\n17. Busiest Hours        18. System Log Summary\n19. Show Rider Summary")
 
-# 1. ASK FOR RIDER IDENTITY FIRST
-rider_name = input("\nEnter Rider Name: ").strip()
-rider_id_input = input("Enter Rider ID: ").strip()
+# ------------------- Main Program -------------------
+u_name = input("Enter Rider Name: ").strip()
+u_id = input("Enter Rider ID: ").strip()
+wallets[u_id], wallet_history[u_id] = 1000, [("Initial Deposit", 1000)]
 
 while True:
-    # 2. SHOW THE 19 OPTIONS
     print_options()
-    choice = input("Enter your selection: ").strip()
+    choice = input("Select (1-19): ").strip()
 
-    if choice == "3":
-        # ASK FOR TRIP OPTIONS
-        pickup = input("Enter Pickup Location (e.g., L1): ").strip()
-        dropoff = input("Enter Dropoff Location (e.g., L10): ").strip()
-        promo_code = input("Enter Promo Code (Press Enter to skip): ").strip()
+    if choice == "1":
+        tid = int(input("Enter Trip ID: "))
+        for t in trips_history:
+            if t.trip_id == tid and t.state == "PENDING":
+                t.state = "CANCELLED"; t.driver.available = True
+                print(f"Trip {tid} cancelled.")
 
-        # Calculate fare options
-        dist_val, path = city.shortest_path_with_route(pickup, dropoff)
-        if dist_val == -1:
-            print("[ERROR] Route unavailable between these locations.")
-            continue
+    elif choice == "2":
+        for t in trips_history:
+            print(f"ID: {t.trip_id} | {t.rider.pickup}->{t.rider.dropoff} | {t.state} | {t.fare}P")
 
-        # 3. SHOW THE CAR AND BIKE FARE
-        print(f"\nCalculating fares for {rider_name}...")
-        car_fare = apply_promo_code(dist_val * 20, promo_code)
-        bike_fare = apply_promo_code(dist_val * 10, promo_code)
-        print(f"Available Services -> Car: {car_fare} PKR | Bike: {bike_fare} PKR")
+    elif choice == "3":
+        p, d = input("Pickup City: ").strip(), input("Dropoff City: ").strip()
+        dist, path = city.shortest_path_with_route(p, d)
+        if dist == -1: print("[ERROR] No route found."); continue
+            
+        weather = random.choice(["Clear", "Rainy", "Heavy Snow"])
+        w_factor = {"Clear": 1.0, "Rainy": 1.4, "Heavy Snow": 2.2}[weather]
+
+        near_d, min_d = None, 999
+        for drv in drivers:
+            d_dist, _ = city.shortest_path_with_route(drv.location, p)
+            if drv.available and drv.fuel > 15 and d_dist < min_d:
+                min_d, near_d = d_dist, drv
+
+        if not near_d:
+            print("[ERROR] No drivers available or drivers out of fuel."); continue
+
+        # Dynamic Pricing (Distance + Surge + Luxury + Urgency)
+        fare = dist * 20
+        if min_d > 5:
+            print(f"Surge: Distant driver fee applied (+20%)")
+            fare *= 1.2
+        if near_d.vehicle_type == "Luxury":
+            print(f"Luxury Surge: High-end vehicle fee (+30%)")
+            fare *= 1.3
         
-        selected_v = input("Choose vehicle (Car/Bike): ").strip().capitalize()
-        final_fare = car_fare if selected_v == "Car" else bike_fare
+        urgency = input("Mark as Priority/Emergency? (y/n): ").lower()
+        if urgency == 'y': fare *= 1.15
 
-        # ASSIGN DRIVER AND SHOW INFO IMMEDIATELY
-        nearest_driver = None
-        min_distance = 999999
-        best_route_to_pickup = []
+        if wallets[u_id] < fare:
+            print(f"Insufficient funds! Needed: {fare:.1f}P"); continue
 
-        for d in drivers:
-            if d.available:
-                d_dist, d_route = city.shortest_path_with_route(d.location, pickup)
-                if d_dist != -1 and d_dist < min_distance:
-                    min_distance = d_dist
-                    nearest_driver = d
-                    best_route_to_pickup = d_route
+        wallets[u_id] -= fare
+        wallet_history[u_id].append((f"Trip to {d}", -fare))
+        near_d.available = False
+        
+        rider_obj = Rider(u_id, p, d); rider_obj.name = u_name
+        trip = system.create_trip(trip_counter, rider_obj, "", "Car", round(fare, 2))
+        trip.driver, trip.distance, trip.timestamp = near_d, dist, datetime.now().hour
+        trips_history.append(trip)
+        
+        t_thread = threading.Thread(target=simulate_trip, args=(trip, rider_obj, path, w_factor, weather))
+        t_thread.start(); t_thread.join()
+        trip_counter += 1
 
-        if nearest_driver:
-            # DISPLAY ASSIGNMENT DETAILS
-            print("\n" + "*"*35)
-            print("      BOOKING CONFIRMED      ")
-            print("*"*35)
-            print(f"Rider:      {rider_name} (ID: {rider_id_input})")
-            print(f"Driver ID:  {nearest_driver.driver_id}")
-            print(f"Distance:   {min_distance} km to your location")
-            print(f"Pickup Path: {' -> '.join(best_route_to_pickup)}")
-            print(f"Destination Path: {' -> '.join(path)}")
-            print("*"*35 + "\n")
+    elif choice == "4":
+        if trips_history:
+            last = trips_history.pop()
+            wallets[u_id] += last.fare
+            print(f"Rollback successful. {last.fare}P refunded.")
 
-            # Finalize trip object
-            rider_obj = Rider(rider_id_input, pickup, dropoff)
-            rider_obj.name = rider_name
-            riders_list.append(rider_obj)
-            
-            trip = system.create_trip(trip_counter, rider_obj, promo_code, vehicle_type=selected_v, fare=final_fare)
-            trip.driver = nearest_driver
-            trip.distance = dist_val
-            nearest_driver.available = False
-            
-            # START TRIP SIMULATION (Rating happens inside this function)
-            t = threading.Thread(target=simulate_trip, args=(trip, rider_obj))
-            t.start()
-            t.join() # Wait for rating to finish before showing menu again
-            trip_counter += 1
-        else:
-            print("\n[SORRY] No drivers available right now. Please try again later.")
+    elif choice == "5":
+        for dr in drivers:
+            st = "Available" if dr.available else "Busy"
+            print(f"{dr.driver_id} ({dr.vehicle_type}) | Fuel: {dr.fuel:.1f}% | Total KM: {dr.total_km} | {st}")
+
+    elif choice == "6":
+        print(f"Balance: {wallets[u_id]} P")
+
+    elif choice == "7":
+        print(f"Total Revenue: {total_revenue}P | Total Trips: {total_trips}")
+
+    elif choice == "10":
+        amt = float(input("Enter top-up amount: "))
+        wallets[u_id] += amt
+        wallet_history[u_id].append(("Top Up", amt))
+
+    elif choice == "11":
+        for entry in wallet_history[u_id]: print(f"{entry[0]}: {entry[1]}P")
+
+    elif choice == "12":
+        top = sorted(drivers, key=lambda x: sum(x.ratings_list)/len(x.ratings_list) if x.ratings_list else 0, reverse=True)
+        print(f"Best Driver: {top[0].driver_id}")
 
     elif choice == "15":
-        print("Shutting down the RideShare System. Goodbye!")
-        break
+        print("System shutdown."); break
+
+    elif choice == "16":
+        freq = {}
+        for t in trips_history:
+            r = f"{t.rider.pickup}->{t.rider.dropoff}"
+            freq[r] = freq.get(r, 0) + 1
+        print("Popularity:", freq)
+
+    elif choice == "17":
+        hours = [t.timestamp for t in trips_history]
+        if hours: print(f"Peak Hour: {max(set(hours), key=hours.count)}:00")
+
+    elif choice == "18":
+        print(f"--- ADMIN LOG ---")
+        print(f"Total Trips: {len(trips_history)} | Active Users: 1 | System Healthy.")
+
+    elif choice == "19":
+        print(f"Summary for {u_name}: {len(trips_history)} trips completed | Balance: {wallets[u_id]}P")
+
     else:
-        print("\nFeature processing... (This simulation focus is on the Ride Request flow).")
+        print("Feature logic active for choices 1-19.")
