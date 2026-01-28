@@ -95,7 +95,7 @@
         </div>
     </div>
 
-    <!-- PAYMENT MODAL (New) -->
+    <!-- PAYMENT MODAL -->
     <div id="payment-modal" class="fixed inset-0 z-[2100] hidden flex items-center justify-center p-4 modal-overlay">
         <div class="glass-card w-full max-w-sm p-8 rounded-3xl border-emerald-500/50 shadow-2xl text-center relative">
             <div class="w-16 h-16 bg-emerald-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -107,12 +107,10 @@
                 <p id="payment-total-display" class="text-2xl font-bold text-emerald-400">0.00 P</p>
             </div>
             <p id="payment-status-msg" class="text-slate-400 text-xs mb-4">Please enter payment amount.</p>
-            
             <div class="relative mb-6">
                 <input type="number" id="payment-input" placeholder="Amount..." class="w-full bg-slate-900 border border-slate-700 rounded-xl p-3 pl-4 text-white focus:border-emerald-500 outline-none transition-all">
                 <span class="absolute right-4 top-3 text-slate-500 text-sm font-bold">P</span>
             </div>
-
             <button onclick="processPayment()" class="w-full py-3 bg-emerald-500 hover:bg-emerald-600 rounded-xl font-bold transition text-white shadow-lg shadow-emerald-500/20">Confirm Payment</button>
         </div>
     </div>
@@ -123,7 +121,7 @@
             <div class="w-16 h-16 bg-yellow-500/20 rounded-full flex items-center justify-center mx-auto mb-4">
                 <i data-lucide="star" class="text-yellow-500 w-8 h-8"></i>
             </div>
-            <h2 class="text-xl font-bold mb-2 text-white">Rate Mission</h2>
+            <h2 id="rating-title" class="text-xl font-bold mb-2 text-white">Rate Mission</h2>
             <div class="flex justify-center gap-3 mb-6">
                 <button onclick="setRating(1)" class="star-btn w-8 h-8"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></button>
                 <button onclick="setRating(2)" class="star-btn w-8 h-8"><svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"></polygon></svg></button>
@@ -245,6 +243,18 @@
                                 <select id="pickup-city" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white outline-none focus:ring-2 focus:ring-sky-500"></select></div>
                             <div><label class="text-[10px] text-slate-500 font-bold uppercase block mb-2">Target</label>
                                 <select id="dropoff-city" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white outline-none focus:ring-2 focus:ring-sky-500"></select></div>
+                            
+                            <!-- Vehicle Selector -->
+                            <div>
+                                <label class="text-[10px] text-slate-500 font-bold uppercase block mb-2">Vehicle Class</label>
+                                <select id="vehicle-type" class="w-full bg-slate-800 border border-slate-700 rounded-xl p-3 text-white outline-none focus:ring-2 focus:ring-sky-500">
+                                    <option value="" disabled selected>Select Vehicle...</option>
+                                    <option value="Car">Standard Car</option>
+                                    <option value="Bike">Moto Courier (Fast)</option>
+                                    <option value="Bus">Travel Bus (Group)</option>
+                                </select>
+                            </div>
+
                             <button onclick="requestRide()" id="book-btn" class="w-full py-4 bg-sky-500 hover:bg-sky-600 rounded-2xl font-bold transition-all text-white flex items-center justify-center gap-3">
                                 <i data-lucide="play" class="w-4 h-4 fill-white"></i> COMMENCE MISSION
                             </button>
@@ -288,9 +298,11 @@
         };
 
         const fleetData = [
-            { id: "TX-1", name: "S. Ozturk", fuel: 92, car: "Tesla S", location: "Istanbul", status: "Available" },
-            { id: "TX-2", name: "K. Yilmaz", fuel: 45, car: "Mercedes E", location: "Ankara", status: "Available" },
-            { id: "TX-3", name: "M. Aksoy", fuel: 78, car: "BMW iX", location: "Izmir", status: "Busy" }
+            { id: "TX-1", name: "S. Ozturk", fuel: 92, car: "Tesla S", type: "Car", location: "Istanbul", status: "Available" },
+            { id: "TX-2", name: "K. Yilmaz", fuel: 45, car: "Mercedes E", type: "Car", location: "Ankara", status: "Available" },
+            { id: "TX-3", name: "M. Aksoy", fuel: 78, car: "BMW iX", type: "Car", location: "Izmir", status: "Busy" },
+            { id: "BK-1", name: "A. Demir", fuel: 100, car: "Yamaha MT-07", type: "Bike", location: "Istanbul", status: "Available" },
+            { id: "BS-1", name: "V. Kaya", fuel: 80, car: "Mercedes Travego", type: "Bus", location: "Antalya", status: "Available" }
         ];
 
         let state = {
@@ -383,21 +395,36 @@
         function requestRide() {
             const p = document.getElementById('pickup-city').value;
             const d = document.getElementById('dropoff-city').value;
+            const vTypeEl = document.getElementById('vehicle-type');
+            const vType = vTypeEl ? vTypeEl.value : null;
             
             if (p === d) return showToast("Invalid Destination");
+            if (!vType) return showToast("Please select a vehicle type (Car, Bike, Bus).", true);
             
             // --- SMART DRIVER ASSIGNMENT LOGIC ---
             let assignedDriver = null;
             let isFarDispatch = false;
             let surgeMultiplier = 1.0;
 
-            assignedDriver = fleetData.find(d => d.location === p && d.status === "Available");
+            // 1. Try to find a LOCAL available driver of specific type
+            assignedDriver = fleetData.find(d => d.location === p && d.status === "Available" && d.type === vType);
 
+            // 2. If no local specific type, find ANY available driver of specific type (Far Dispatch)
             if (!assignedDriver) {
-                assignedDriver = fleetData.find(d => d.status === "Available");
+                assignedDriver = fleetData.find(d => d.status === "Available" && d.type === vType);
                 if (assignedDriver) {
                     isFarDispatch = true;
                     surgeMultiplier = 1.5; 
+                }
+            }
+
+            // 3. If NO driver of that type, fallback to ANY available driver
+            if (!assignedDriver) {
+                assignedDriver = fleetData.find(d => d.status === "Available");
+                if(assignedDriver) {
+                    isFarDispatch = true;
+                    surgeMultiplier = 1.5;
+                    showToast(`No ${vType} available. Upgrading to ${assignedDriver.type}.`);
                 }
             }
 
@@ -408,12 +435,13 @@
             const start = cityData[p];
             const end = cityData[d];
             const dist = Math.floor(state.map.distance(start, end) / 1000);
-            const baseFare = (dist * 0.8);
-            const totalFare = (baseFare * surgeMultiplier).toFixed(2);
+            let baseFare = (dist * 0.8);
+            
+            // Vehicle Multipliers
+            if(vType === 'Bike') baseFare *= 0.6;
+            if(vType === 'Bus') baseFare *= 1.8;
 
-            // Removed upfront deduction logic as requested by user's new flow
-            // if (state.balance < totalFare) return showToast("Low Credits");
-            // state.balance -= parseFloat(totalFare);
+            const totalFare = (baseFare * surgeMultiplier).toFixed(2);
 
             assignedDriver.status = "Busy";
             
@@ -436,22 +464,31 @@
             state.activePolyline = L.polyline([start, end], {color: '#0ea5e9', weight: 4, dashArray: '10, 10'}).addTo(state.map);
             state.map.fitBounds(state.activePolyline.getBounds(), {padding: [50, 50]});
 
+            // Custom Car Icon - Color/Size based on Type
+            let iconColor = '#38bdf8'; // Blue (Car)
+            let iconSize = 12;
+            if (vType === 'Bike') { iconColor = '#facc15'; iconSize = 8; } // Yellow (Bike)
+            if (vType === 'Bus') { iconColor = '#fb923c'; iconSize = 16; } // Orange (Bus)
+
             const carIcon = L.divIcon({
                 className: 'custom-div-icon',
-                html: `<div style="background-color:#38bdf8;width:12px;height:12px;border-radius:50%;box-shadow:0 0 10px #38bdf8;"></div>`,
-                iconSize: [12, 12],
-                iconAnchor: [6, 6]
+                html: `<div style="background-color:${iconColor};width:${iconSize}px;height:${iconSize}px;border-radius:50%;box-shadow:0 0 10px ${iconColor};"></div>`,
+                iconSize: [iconSize, iconSize],
+                iconAnchor: [iconSize/2, iconSize/2]
             });
 
             state.activeMarker = L.marker(start, {icon: carIcon}).addTo(state.map);
 
             let progress = 0;
-            const steps = 100;
+            // Speed adjustment: Bike fastest (30ms), Bus slowest (70ms)
+            let speed = 50;
+            if(vType === 'Bike') speed = 30;
+            if(vType === 'Bus') speed = 70;
             
             const timer = setInterval(() => {
                 progress++;
-                const lat = start[0] + (end[0] - start[0]) * (progress / steps);
-                const lng = start[1] + (end[1] - start[1]) * (progress / steps);
+                const lat = start[0] + (end[0] - start[0]) * (progress / 100);
+                const lng = start[1] + (end[1] - start[1]) * (progress / 100);
                 
                 state.activeMarker.setLatLng([lat, lng]);
                 document.getElementById('progress-percent').innerText = progress + "%";
@@ -460,7 +497,7 @@
                     clearInterval(timer);
                     completeTrip(p, d, totalFare, dist, assignedDriver);
                 }
-            }, 50);
+            }, speed);
 
             state.activeTrip = { timer, fare: totalFare, driver: assignedDriver };
             updateUI(); 
@@ -529,7 +566,9 @@
             document.getElementById('book-btn').disabled = false;
             
             state.pendingTrip = null;
-            triggerManualRating();
+            
+            // Auto open specific driver rating when trip finishes
+            openRatingFor(driver.name);
             updateUI();
         }
 
@@ -560,7 +599,29 @@
         }
 
         function showAllWallets() { openModal("Financial Overview", `Main: ${state.balance.toFixed(2)}P\nBonus: 150P\nEscrow: 0P`); }
-        function triggerManualRating() { document.getElementById('rating-modal').classList.remove('hidden'); }
+        
+        // Manual Rating Trigger - Shows list of drivers
+        function triggerManualRating() { 
+            const contentDiv = document.getElementById('modal-content');
+            document.getElementById('modal-title').innerText = "Select Driver to Rate";
+            
+            const buttons = fleetData.map(d => 
+                `<button onclick="openRatingFor('${d.name}')" class="w-full text-left p-3 mb-2 bg-slate-800/50 border border-slate-700 hover:bg-slate-700 hover:border-sky-500 rounded-xl flex items-center justify-between transition-all group">
+                    <span class="text-sm font-bold text-slate-200 group-hover:text-white">${d.name}</span>
+                    <span class="text-xs text-slate-500 group-hover:text-sky-400">${d.car}</span>
+                 </button>`
+            ).join('');
+            
+            contentDiv.innerHTML = buttons; 
+            document.getElementById('info-modal').classList.remove('hidden');
+        }
+
+        function openRatingFor(driverName) {
+            closeModal();
+            document.getElementById('rating-title').innerText = `Rate ${driverName}`;
+            document.getElementById('rating-modal').classList.remove('hidden');
+        }
+
         function rateRider() { openModal("Rate Rider", "Select rider to rate:\n[Murat] - 4.9 Stars"); }
         function topUp(amt) { state.balance += amt; updateUI(); showToast(`+${amt}P Added`); }
         function showWalletHistory() { openModal("Wallet History", "[12:00] +1000P Deposit\n[11:30] -120P Trip Fare"); }
