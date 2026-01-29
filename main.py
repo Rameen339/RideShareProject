@@ -207,7 +207,7 @@ while True:
         print(f"Best Driver: {top[0].driver_id}")
 
     elif choice == "15":
-        print("System shutdown."); break
+        print("System shutdown. Bye see you later"); break
 
     elif choice == "16":
         freq = {}
