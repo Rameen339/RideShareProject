@@ -8,9 +8,11 @@ from city import City
 import time, threading, random
 from datetime import datetime
 
+                                #CASE SENSITIVE 
 # ------------------- Initialization -------------------
 rollback_manager = RollbackManager()
 city = City()
+
 
 turkey_cities = ["Istanbul", "Ankara", "Izmir", "Bursa", "Antalya", "Adana", "Konya", 
                  "Gaziantep", "Sanliurfa", "Mersin", "Diyarbakir", "Kayseri", "Eskisehir", 
@@ -125,6 +127,12 @@ while True:
             print(f"ID: {t.trip_id} | {t.rider.pickup}->{t.rider.dropoff} | {t.state} | {t.fare}P")
 
     elif choice == "3":
+        print("\n--- AVAILABLE CITIES IN TURKEY ---")
+        for i, name in enumerate(turkey_cities, 1):
+            print(f"{i:2}. {name:<12}", end="\t")
+            if i % 3 == 0: 
+                print()
+        print("\n" + "-"*30)
         p, d = input("Pickup City: ").strip(), input("Dropoff City: ").strip()
         dist, path = city.shortest_path_with_route(p, d)
         if dist == -1: print("[ERROR] No route found."); continue
